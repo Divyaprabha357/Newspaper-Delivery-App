@@ -721,20 +721,6 @@ app.get("/api/notifications", (req, res) => {
 
 
 // =========================================
-// START SERVER
-// =========================================
-
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-
-    console.log(
-        `DAILY server running on http://localhost:${PORT}`
-    );
-
-});
-
-// =========================================
 // CUSTOMER PROFILE
 // =========================================
 
@@ -837,6 +823,28 @@ app.post("/api/subscriptions", (req, res) => {
 // NOTIFICATION READ STATE
 // =========================================
 
+app.patch("/api/notifications/read-all", (req, res) => {
+    const { customer_id } = req.body;
+    if (!customer_id) {
+        return res.status(400).json({ success: false, message: "customer_id is required" });
+    }
+
+    db.query(`
+        UPDATE notifications n
+        JOIN customers c ON c.user_id = n.user_id
+        SET n.is_read = 1
+        WHERE c.customer_id = ? AND n.is_read = 0`,
+        [customer_id],
+        (err, result) => {
+            if (err) {
+                console.error("Error marking notifications as read:", err);
+                return res.status(500).json({ success: false, message: "Failed to update notifications" });
+            }
+            res.json({ success: true, message: "All notifications marked as read", updated: result.affectedRows });
+        }
+    );
+});
+
 app.patch("/api/notifications/:notificationId/read", (req, res) => {
     const { notificationId } = req.params;
     const { customer_id } = req.body;
@@ -848,4 +856,14 @@ app.patch("/api/notifications/:notificationId/read", (req, res) => {
             if (!result.affectedRows) return res.status(404).json({ success: false, message: "Notification not found" });
             res.json({ success: true, message: "Notification marked as read" });
         });
+});
+
+// =========================================
+// START SERVER
+// =========================================
+
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`DAILY server running on http://localhost:${PORT}`);
 });
