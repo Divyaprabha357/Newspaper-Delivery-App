@@ -57,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     const Text(
                       'WELCOME BACK',
                       style: TextStyle(
-                        fontSize: 36,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF2B2A28),
                       ),
@@ -246,3 +246,5 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
+

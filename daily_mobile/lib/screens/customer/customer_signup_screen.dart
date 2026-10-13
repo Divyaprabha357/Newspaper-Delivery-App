@@ -194,7 +194,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
           const Text(
             'YOUR INFORMATION',
             style: TextStyle(
-              fontSize: 32,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: Color(0xFF2B2A28),
             ),
@@ -265,7 +265,7 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
           const Text(
             'SET YOUR PASSWORD',
             style: TextStyle(
-              fontSize: 32,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: Color(0xFF2B2A28),
             ),
@@ -428,3 +428,5 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
     );
   }
 }
+
+

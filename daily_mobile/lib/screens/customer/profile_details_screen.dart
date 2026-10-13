@@ -82,10 +82,10 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
       child: TextFormField(
         controller: controller,
         readOnly: !_isEditing,
-        style: const TextStyle(fontSize: 15),
+        style: const TextStyle(fontSize: 16),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(fontSize: 13),
+          labelStyle: const TextStyle(fontSize: 14),
           suffixIcon: _isEditing
               ? const Icon(Icons.edit_outlined, size: 18)
               : null,
@@ -99,3 +99,5 @@ class _ProfileDetailsScreenState extends State<ProfileDetailsScreen> {
         .showSnackBar(const SnackBar(content: Text('Profile changes saved.')));
   }
 }
+
+

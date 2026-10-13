@@ -44,7 +44,7 @@ class _SubscriptionCatalogScreenState extends State<SubscriptionCatalogScreen> {
                 trailing: Text(
                   '${activeSubscriptions.length} ACTIVE',
                   style: const TextStyle(
-                    fontSize: 10,
+                    fontSize: 14,
                     color: DailyColors.burgundy,
                     fontWeight: FontWeight.bold,
                     letterSpacing: .7,
@@ -58,7 +58,7 @@ class _SubscriptionCatalogScreenState extends State<SubscriptionCatalogScreen> {
                 children: [
                   const Text(
                     'Your active newspapers',
-                    style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 6),
                   const Text(
@@ -98,7 +98,7 @@ class _SubscriptionCatalogScreenState extends State<SubscriptionCatalogScreen> {
         icon: const Icon(Icons.add, size: 24),
         label: const Text(
           'ADD NEW SUBSCRIPTION',
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
         ),
       ),
     );
@@ -159,7 +159,7 @@ class _ActiveSubscriptionCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'ACTIVE • $language',
+                      'ACTIVE â€¢ $language',
                       style: const TextStyle(
                         fontSize: 12,
                         color: DailyColors.oliveDark,
@@ -175,7 +175,7 @@ class _ActiveSubscriptionCard extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Partner: $partner • 7:30 AM',
+                      'Partner: $partner â€¢ 7:30 AM',
                       style: const TextStyle(
                         fontSize: 12,
                         color: DailyColors.gray,
@@ -248,7 +248,7 @@ class _NewspaperCatalogScreenState extends State<_NewspaperCatalogScreen> {
                 padding: const EdgeInsets.fromLTRB(22, 8, 22, 30),
                 children: [
                   TextField(
-                    style: const TextStyle(fontSize: 15),
+                    style: const TextStyle(fontSize: 16),
                     onChanged: (value) => setState(() => query = value),
                     decoration: const InputDecoration(
                       hintText: 'Search newspapers...',
@@ -282,13 +282,13 @@ class _NewspaperCatalogScreenState extends State<_NewspaperCatalogScreen> {
                                   Text(
                                     paper.$1,
                                     style: const TextStyle(
-                                      fontSize: 17,
+                                      fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   const SizedBox(height: 5),
                                   const Text(
-                                    'English • National • Daily',
+                                    'English â€¢ National â€¢ Daily',
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: DailyColors.gray,
@@ -298,7 +298,7 @@ class _NewspaperCatalogScreenState extends State<_NewspaperCatalogScreen> {
                                   Text(
                                     paper.$2,
                                     style: const TextStyle(
-                                      fontSize: 13,
+                                      fontSize: 14,
                                       color: DailyColors.burgundy,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -325,3 +325,5 @@ class _NewspaperCatalogScreenState extends State<_NewspaperCatalogScreen> {
     );
   }
 }
+
+

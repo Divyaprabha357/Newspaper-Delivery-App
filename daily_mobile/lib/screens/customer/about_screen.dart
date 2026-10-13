@@ -27,7 +27,7 @@ class AboutScreen extends StatelessWidget {
                   Text(
                     'DAILY',
                     style: TextStyle(
-                      fontSize: 32,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: DailyColors.burgundy,
                     ),
@@ -42,14 +42,14 @@ class AboutScreen extends StatelessWidget {
                   SizedBox(height: 10),
                   Text(
                     'Browse available newspapers, subscribe in a few taps, and use the DAILY customer app to manage deliveries, payments and support requests.',
-                    style: TextStyle(fontSize: 15, height: 1.5),
+                    style: TextStyle(fontSize: 16, height: 1.5),
                   ),
                   SizedBox(height: 22),
                   SectionLabel('Support'),
                   SizedBox(height: 10),
                   Text(
                     'For help with delivery, subscriptions or payments, use Ask Help or contact the DAILY support team.',
-                    style: TextStyle(fontSize: 15, height: 1.5),
+                    style: TextStyle(fontSize: 16, height: 1.5),
                   ),
                 ],
               ),
@@ -60,3 +60,5 @@ class AboutScreen extends StatelessWidget {
     );
   }
 }
+
+

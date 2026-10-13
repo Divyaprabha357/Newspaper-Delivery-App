@@ -2,31 +2,62 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
+import '../../services/customer_api_service.dart';
+import '../../services/session_service.dart';
 
-class DeliveryHistoryScreen extends StatelessWidget {
+class DeliveryHistoryScreen extends StatefulWidget {
   const DeliveryHistoryScreen({super.key});
 
   @override
+  State<DeliveryHistoryScreen> createState() => _DeliveryHistoryScreenState();
+}
+
+class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
+  bool loading = true;
+  String? error;
+  List<dynamic> items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final id = await SessionService.getCustomerId();
+    if (id == null) {
+      if (mounted) setState(() { loading = false; error = 'Your session has expired.'; });
+      return;
+    }
+    try {
+      final response = await CustomerApiService().deliveryHistory(id);
+      if (mounted) setState(() { items = List<dynamic>.from(response['deliveries'] as List? ?? []); loading = false; });
+    } on CustomerApiException catch (e) {
+      if (mounted) setState(() { loading = false; error = e.message; });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final items = [
+    final fallbackItems = [
       (
         '5 SEP 2026',
         'The Times of India',
-        'DELIVERED • 7:02 AM',
+        'DELIVERED â€¢ 7:02 AM',
         DailyColors.success,
       ),
-      ('4 SEP 2026', 'The Hindu', 'DELIVERED • 6:58 AM', DailyColors.success),
-      ('3 SEP 2026', 'Indian Express', 'MISSED • 7:05 AM', DailyColors.warning),
+      ('4 SEP 2026', 'The Hindu', 'DELIVERED â€¢ 6:58 AM', DailyColors.success),
+      ('3 SEP 2026', 'Indian Express', 'MISSED â€¢ 7:05 AM', DailyColors.warning),
       (
         '2 SEP 2026',
         'Business Standard',
-        'DELIVERED • 7:05 AM',
+        'DELIVERED â€¢ 7:05 AM',
         DailyColors.success,
       ),
       (
         '1 SEP 2026',
         'The Times of India',
-        'DELIVERED • 7:00 AM',
+        'DELIVERED â€¢ 7:00 AM',
         DailyColors.success,
       ),
     ];
@@ -49,12 +80,12 @@ class DeliveryHistoryScreen extends StatelessWidget {
                 children: [
                   const Text(
                     'Timeline',
-                    style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 4),
                   const Text(
                     'Your journey of informed mornings, recorded day by day.',
-                    style: TextStyle(fontSize: 10, color: DailyColors.gray),
+                    style: TextStyle(fontSize: 14, color: DailyColors.gray),
                   ),
                   const SizedBox(height: 14),
                   SingleChildScrollView(
@@ -80,7 +111,7 @@ class DeliveryHistoryScreen extends StatelessWidget {
                                 child: Text(
                                   x,
                                   style: TextStyle(
-                                    fontSize: 8,
+                                    fontSize: 12,
                                     color: x == 'ALL'
                                         ? Colors.white
                                         : DailyColors.charcoal,
@@ -94,7 +125,22 @@ class DeliveryHistoryScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  Container(
+                  if (loading)
+                    const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(child: CircularProgressIndicator(color: DailyColors.burgundy)),
+                    )
+                  else if (error != null)
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(children: [
+                        Text(error!, textAlign: TextAlign.center),
+                        TextButton(onPressed: () { setState(() { loading = true; error = null; }); _load(); }, child: const Text('TRY AGAIN')),
+                      ]),
+                    )
+                  else if (items.isEmpty)
+                    const Padding(padding: EdgeInsets.all(20), child: Text('No delivery history yet.'))
+                  else Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: DailyColors.white,
@@ -102,14 +148,20 @@ class DeliveryHistoryScreen extends StatelessWidget {
                     ),
                     child: Column(
                       children: List.generate(items.length, (i) {
-                        final e = items[i];
-                        return _item(
-                          e.$1,
-                          e.$2,
-                          e.$3,
-                          e.$4,
-                          i == items.length - 1,
-                        );
+                        if (items.isNotEmpty) {
+                          final row = Map<String, dynamic>.from(items[i] as Map);
+                          final status = (row['item_status'] ?? row['delivery_status'] ?? 'UNKNOWN').toString().toUpperCase();
+                          final color = status.contains('DELIVER') ? DailyColors.success : DailyColors.warning;
+                          return _item(
+                            (row['delivery_date'] ?? '—').toString(),
+                            (row['newspaper_name'] ?? 'Newspaper').toString(),
+                            '$status â€¢ ${(row['actual_time'] ?? row['scheduled_time'] ?? '—')}',
+                            color,
+                            i == items.length - 1,
+                          );
+                        }
+                        final e = fallbackItems[i];
+                        return _item(e.$1, e.$2, e.$3, e.$4, i == fallbackItems.length - 1);
                       }),
                     ),
                   ),
@@ -132,7 +184,7 @@ class DeliveryHistoryScreen extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'STATUS GUIDE\nGreen = delivered. Orange = attention required. Missing a paper? Report it from Service Requests.',
-                            style: TextStyle(fontSize: 9, height: 1.4),
+                            style: TextStyle(fontSize: 12, height: 1.4),
                           ),
                         ),
                       ],
@@ -177,7 +229,7 @@ class DeliveryHistoryScreen extends StatelessWidget {
               Text(
                 date,
                 style: const TextStyle(
-                  fontSize: 8,
+                  fontSize: 12,
                   color: DailyColors.gray,
                   letterSpacing: .8,
                 ),
@@ -186,7 +238,7 @@ class DeliveryHistoryScreen extends StatelessWidget {
               Text(
                 paper,
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -194,7 +246,7 @@ class DeliveryHistoryScreen extends StatelessWidget {
               Text(
                 status,
                 style: TextStyle(
-                  fontSize: 8,
+                  fontSize: 12,
                   color: color,
                   fontWeight: FontWeight.bold,
                 ),
@@ -206,3 +258,5 @@ class DeliveryHistoryScreen extends StatelessWidget {
     ],
   );
 }
+
+

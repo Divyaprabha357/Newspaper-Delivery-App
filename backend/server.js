@@ -1,11 +1,24 @@
 const express = require("express");
 const cors = require("cors");
+const crypto = require("crypto");
 const db = require("./db");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+const activeSessions = new Map();
+
+function createSession(userId, role) {
+    const token = crypto.randomBytes(32).toString("hex");
+    activeSessions.set(token, {
+        userId,
+        role,
+        expiresAt: Date.now() + 1000 * 60 * 60 * 12
+    });
+    return token;
+}
 
 
 // =========================================
@@ -103,10 +116,11 @@ app.post("/api/login", (req, res) => {
 
     const {
         emailOrPhone,
-        password
+        password,
+        partnerCode
     } = req.body;
 
-    if (!emailOrPhone || !password) {
+    if ((!emailOrPhone && !partnerCode) || !password) {
 
         return res.status(400).json({
             success: false,
@@ -126,22 +140,34 @@ app.post("/api/login", (req, res) => {
             u.status,
 
             c.customer_id,
-            c.customer_code
+            c.customer_code,
+
+            sp.supplier_id,
+            sp.supplier_name,
+            dp.partner_id,
+            dp.partner_code
 
         FROM users u
 
         LEFT JOIN customers c
             ON u.user_id = c.user_id
 
+        LEFT JOIN suppliers sp
+            ON u.user_id = sp.user_id
+
+        LEFT JOIN delivery_partners dp
+            ON u.user_id = dp.user_id
+
         WHERE u.email = ?
            OR u.phone = ?
+           OR (? IS NOT NULL AND dp.partner_code = ?)
 
         LIMIT 1;
     `;
 
     db.query(
         sql,
-        [emailOrPhone, emailOrPhone],
+        [emailOrPhone, emailOrPhone, partnerCode || null, partnerCode || null],
         (err, results) => {
 
             if (err) {
@@ -192,6 +218,8 @@ app.post("/api/login", (req, res) => {
             }
 
 
+            const sessionToken = createSession(user.user_id, user.role);
+
             // Login successful
             res.json({
                 success: true,
@@ -201,6 +229,11 @@ app.post("/api/login", (req, res) => {
                     user_id: user.user_id,
                     customer_id: user.customer_id,
                     customer_code: user.customer_code,
+                    supplier_id: user.supplier_id,
+                    supplier_name: user.supplier_name,
+                    partner_id: user.partner_id,
+                    partner_code: user.partner_code,
+                    session_token: sessionToken,
                     name: user.name,
                     email: user.email,
                     phone: user.phone,
@@ -856,6 +889,412 @@ app.patch("/api/notifications/:notificationId/read", (req, res) => {
             if (!result.affectedRows) return res.status(404).json({ success: false, message: "Notification not found" });
             res.json({ success: true, message: "Notification marked as read" });
         });
+});
+
+// =========================================
+// SUPPLIER WORKSPACE
+// =========================================
+
+function withRole(req, res, role, callback) {
+    const authorization = req.header("authorization") || "";
+    const token = authorization.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+    const session = activeSessions.get(token);
+    if (!session || session.expiresAt < Date.now() || session.role !== role) {
+        return res.status(401).json({ success: false, message: "Your session is invalid or has expired" });
+    }
+    const userId = session.userId;
+
+    const sql = `
+        SELECT u.user_id, u.name, u.email, u.phone, u.role, u.status,
+               sp.supplier_id, sp.supplier_name, sp.contact_number AS supplier_contact,
+               sp.address AS supplier_address, sp.created_at AS supplier_created_at,
+               dp.partner_id, dp.partner_code, dp.emergency_contact,
+               dp.shift_start, dp.shift_end, dp.status AS partner_status
+        FROM users u
+        LEFT JOIN suppliers sp ON sp.user_id = u.user_id
+        LEFT JOIN delivery_partners dp ON dp.user_id = u.user_id
+        WHERE u.user_id = ? AND u.role = ? AND u.status = 'ACTIVE'
+        LIMIT 1`;
+
+    db.query(sql, [userId, role], (err, rows) => {
+        if (err) {
+            console.error("Role authorization error:", err);
+            return res.status(500).json({ success: false, message: "Failed to authorize the account" });
+        }
+        if (!rows.length) {
+            return res.status(403).json({ success: false, message: "This account is not authorized for this workspace" });
+        }
+        callback(rows[0]);
+    });
+}
+
+app.get("/api/supplier/profile", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        db.query(`
+            SELECT sp.supplier_id, sp.supplier_name, sp.contact_number, sp.address,
+                   sp.status AS supplier_status, sp.created_at,
+                   u.user_id, u.name, u.email, u.phone, u.status AS account_status,
+                   a.area_id, a.area_name, a.city, a.pincode,
+                   sa.status AS area_status
+            FROM suppliers sp
+            JOIN users u ON u.user_id = sp.user_id
+            LEFT JOIN supplier_areas sa ON sa.supplier_id = sp.supplier_id
+                AND sa.status = 'ACTIVE'
+            LEFT JOIN areas a ON a.area_id = sa.area_id
+            WHERE sp.supplier_id = ?
+            ORDER BY a.area_name`,
+            [identity.supplier_id],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load supplier profile" });
+                if (!rows.length) return res.status(404).json({ success: false, message: "Supplier profile not found" });
+                const profile = rows[0];
+                profile.service_areas = rows
+                    .filter((row) => row.area_id !== null)
+                    .map((row) => ({
+                        area_id: row.area_id,
+                        area_name: row.area_name,
+                        city: row.city,
+                        pincode: row.pincode,
+                        status: row.area_status
+                    }));
+                res.json({ success: true, profile });
+            }
+        );
+    });
+});
+
+app.get("/api/supplier/newspapers", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        db.query(`
+            SELECT n.newspaper_id, n.newspaper_name, n.language, n.publication_type,
+                   sn.supplier_newspaper_id, sn.status AS availability_status,
+                   sn.available_from, sn.available_until,
+                   np.price_per_delivery, np.effective_from, np.effective_until
+            FROM supplier_newspapers sn
+            JOIN newspapers n ON n.newspaper_id = sn.newspaper_id
+            LEFT JOIN newspaper_prices np ON np.price_id = (
+                SELECT price_id FROM newspaper_prices
+                WHERE newspaper_id = sn.newspaper_id
+                  AND effective_from <= CURDATE()
+                  AND (effective_until IS NULL OR effective_until >= CURDATE())
+                ORDER BY effective_from DESC LIMIT 1
+            )
+            WHERE sn.supplier_id = ?
+            ORDER BY n.newspaper_name`,
+            [identity.supplier_id],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load supplier newspapers" });
+                res.json({ success: true, newspapers: rows });
+            }
+        );
+    });
+});
+
+app.get("/api/supplier/subscriptions", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        db.query(`
+            SELECT s.subscription_id, s.customer_id, s.newspaper_id, s.start_date,
+                   s.end_date, s.status, s.delivery_days, s.scheduled_delivery_time,
+                   s.agreed_price, n.newspaper_name, n.language,
+                   u.name AS customer_name, u.email AS customer_email, u.phone AS customer_phone,
+                   ca.address_line, ca.city, ca.pincode, a.area_id, a.area_name
+            FROM subscriptions s
+            JOIN customers c ON c.customer_id = s.customer_id
+            JOIN users u ON u.user_id = c.user_id
+            JOIN newspapers n ON n.newspaper_id = s.newspaper_id
+            JOIN customer_addresses ca ON ca.address_id = s.address_id
+            JOIN areas a ON a.area_id = ca.area_id
+            WHERE s.supplier_id = ?
+            ORDER BY s.start_date DESC, s.subscription_id DESC`,
+            [identity.supplier_id],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load supplier subscriptions" });
+                res.json({ success: true, subscriptions: rows });
+            }
+        );
+    });
+});
+
+app.get("/api/supplier/deliveries", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        const date = req.query.date || null;
+        db.query(`
+            SELECT d.delivery_id, d.delivery_date, d.scheduled_time, d.actual_time,
+                   d.status AS delivery_status, d.failure_reason_id, d.remarks,
+                   di.delivery_item_id, di.status AS item_status, di.remarks AS item_remarks,
+                   n.newspaper_id, n.newspaper_name, n.language,
+                   u.name AS customer_name, ca.address_line, ca.city, ca.pincode,
+                   a.area_name, dp.partner_id, pu.name AS partner_name
+            FROM deliveries d
+            JOIN delivery_items di ON di.delivery_id = d.delivery_id
+            JOIN subscriptions s ON s.subscription_id = di.subscription_id
+            JOIN newspapers n ON n.newspaper_id = di.newspaper_id
+            JOIN customers c ON c.customer_id = d.customer_id
+            JOIN users u ON u.user_id = c.user_id
+            JOIN customer_assignments caa ON caa.assignment_id = d.assignment_id
+            JOIN customer_addresses ca ON ca.address_id = caa.address_id
+            JOIN areas a ON a.area_id = ca.area_id
+            JOIN delivery_partners dp ON dp.partner_id = d.partner_id
+            JOIN users pu ON pu.user_id = dp.user_id
+            WHERE s.supplier_id = ?
+              AND (? IS NULL OR d.delivery_date = ?)
+            ORDER BY d.delivery_date DESC, d.scheduled_time, d.delivery_id`,
+            [identity.supplier_id, date, date],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load supplier deliveries" });
+                res.json({ success: true, deliveries: rows });
+            }
+        );
+    });
+});
+
+app.get("/api/supplier/payments", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        db.query(`
+            SELECT DISTINCT b.bill_id, b.customer_id, b.billing_period_start,
+                   b.billing_period_end, b.subtotal, b.adjustments, b.total_amount,
+                   b.status AS bill_status, p.payment_id, p.amount,
+                   p.payment_method, p.transaction_reference, p.payment_date,
+                   p.status AS payment_status, u.name AS customer_name
+            FROM bills b
+            JOIN bill_items bi ON bi.bill_id = b.bill_id
+            JOIN subscriptions s ON s.subscription_id = bi.subscription_id
+            JOIN customers c ON c.customer_id = b.customer_id
+            JOIN users u ON u.user_id = c.user_id
+            LEFT JOIN payments p ON p.bill_id = b.bill_id
+            WHERE s.supplier_id = ?
+            ORDER BY COALESCE(p.payment_date, b.generated_at) DESC`,
+            [identity.supplier_id],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load supplier payments" });
+                res.json({ success: true, payments: rows });
+            }
+        );
+    });
+});
+
+app.get("/api/supplier/notifications", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        db.query(`
+            SELECT notification_id, user_id, notification_type, title, message,
+                   reference_type, reference_id, is_read, created_at
+            FROM notifications
+            WHERE user_id = ?
+            ORDER BY created_at DESC`,
+            [identity.user_id],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load supplier notifications" });
+                res.json({ success: true, notifications: rows });
+            }
+        );
+    });
+});
+
+// =========================================
+// DELIVERY PARTNER WORKSPACE
+// =========================================
+
+app.get("/api/partner/profile", (req, res) => {
+    withRole(req, res, "DELIVERY_PARTNER", (identity) => {
+        db.query(`
+            SELECT dp.partner_id, dp.partner_code, dp.emergency_contact,
+                   dp.recommended_customer_limit, dp.shift_start, dp.shift_end,
+                   dp.status AS partner_status, u.user_id, u.name, u.email, u.phone,
+                   u.status AS account_status, v.vehicle_type, v.registration_number,
+                   v.status AS vehicle_status
+            FROM delivery_partners dp
+            JOIN users u ON u.user_id = dp.user_id
+            LEFT JOIN partner_vehicles v ON v.partner_id = dp.partner_id AND v.status = 'ACTIVE'
+            WHERE dp.partner_id = ?`,
+            [identity.partner_id],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load delivery partner profile" });
+                if (!rows.length) return res.status(404).json({ success: false, message: "Delivery partner profile not found" });
+                res.json({ success: true, profile: rows[0] });
+            }
+        );
+    });
+});
+
+app.get("/api/partner/routes", (req, res) => {
+    withRole(req, res, "DELIVERY_PARTNER", (identity) => {
+        const date = req.query.date || null;
+        db.query(`
+            SELECT dr.daily_route_id, dr.route_date, dr.status AS route_status,
+                   r.route_id, r.route_name, a.area_id, a.area_name,
+                   rp.shift_start, rp.shift_end,
+                   caa.assignment_id, caa.sequence_number, caa.status AS assignment_status,
+                   c.customer_id, u.name AS customer_name, u.phone AS customer_phone,
+                   ca.address_line, ca.city, ca.pincode, ca.delivery_instructions
+            FROM route_partners rp
+            JOIN daily_routes dr ON dr.daily_route_id = rp.daily_route_id
+            JOIN routes r ON r.route_id = dr.route_id
+            JOIN areas a ON a.area_id = r.area_id
+            LEFT JOIN customer_assignments caa
+                ON caa.daily_route_id = dr.daily_route_id
+               AND caa.partner_id = rp.partner_id
+               AND caa.status <> 'REASSIGNED'
+            LEFT JOIN customers c ON c.customer_id = caa.customer_id
+            LEFT JOIN users u ON u.user_id = c.user_id
+            LEFT JOIN customer_addresses ca ON ca.address_id = caa.address_id
+            WHERE rp.partner_id = ?
+              AND (? IS NULL OR dr.route_date = ?)
+            ORDER BY dr.route_date DESC, caa.sequence_number`,
+            [identity.partner_id, date, date],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load assigned routes" });
+                res.json({ success: true, routes: rows });
+            }
+        );
+    });
+});
+
+app.get("/api/partner/deliveries", (req, res) => {
+    withRole(req, res, "DELIVERY_PARTNER", (identity) => {
+        const date = req.query.date || null;
+        db.query(`
+            SELECT d.delivery_id, d.assignment_id, d.delivery_date, d.scheduled_time,
+                   d.actual_time, d.status AS delivery_status, d.failure_reason_id,
+                   d.remarks, di.delivery_item_id, di.subscription_id,
+                   di.newspaper_id, di.status AS item_status, di.reason_id,
+                   di.remarks AS item_remarks, n.newspaper_name, n.language,
+                   c.customer_id, u.name AS customer_name, ca.address_line,
+                   ca.city, ca.pincode, ca.delivery_instructions,
+                   dfr.reason_name AS failure_reason
+            FROM deliveries d
+            JOIN delivery_items di ON di.delivery_id = d.delivery_id
+            JOIN newspapers n ON n.newspaper_id = di.newspaper_id
+            JOIN customers c ON c.customer_id = d.customer_id
+            JOIN users u ON u.user_id = c.user_id
+            JOIN customer_addresses ca ON ca.address_id = (
+                SELECT address_id FROM customer_assignments
+                WHERE assignment_id = d.assignment_id LIMIT 1
+            )
+            LEFT JOIN delivery_failure_reasons dfr ON dfr.reason_id = d.failure_reason_id
+            WHERE d.partner_id = ?
+              AND (? IS NULL OR d.delivery_date = ?)
+            ORDER BY d.delivery_date DESC, d.scheduled_time, d.delivery_id`,
+            [identity.partner_id, date, date],
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load assigned deliveries" });
+                res.json({ success: true, deliveries: rows });
+            }
+        );
+    });
+});
+
+app.get("/api/partner/failure-reasons", (req, res) => {
+    withRole(req, res, "DELIVERY_PARTNER", () => {
+        db.query(
+            "SELECT reason_id, reason_name, category FROM delivery_failure_reasons ORDER BY reason_name",
+            (err, rows) => {
+                if (err) return res.status(500).json({ success: false, message: "Failed to load failure reasons" });
+                res.json({ success: true, reasons: rows });
+            }
+        );
+    });
+});
+
+app.patch("/api/partner/deliveries/:deliveryId/status", (req, res) => {
+    withRole(req, res, "DELIVERY_PARTNER", (identity) => {
+        const deliveryId = Number(req.params.deliveryId);
+        const status = String(req.body.status || "").toUpperCase();
+        const allowed = ["DELIVERED", "PARTIALLY_DELIVERED", "NOT_DELIVERED", "DELAYED"];
+        if (!Number.isInteger(deliveryId) || !allowed.includes(status)) {
+            return res.status(400).json({ success: false, message: "A valid delivery and status are required" });
+        }
+        const failureReasonId = req.body.failure_reason_id ? Number(req.body.failure_reason_id) : null;
+        const remarks = req.body.remarks ? String(req.body.remarks).trim() : null;
+        const itemStatuses = Array.isArray(req.body.items) ? req.body.items : [];
+        db.beginTransaction((beginError) => {
+            if (beginError) return res.status(500).json({ success: false, message: "Unable to start delivery update" });
+            db.query(
+                "SELECT delivery_id FROM deliveries WHERE delivery_id = ? AND partner_id = ? FOR UPDATE",
+                [deliveryId, identity.partner_id],
+                (findError, rows) => {
+                    if (findError || !rows.length) {
+                        return db.rollback(() => res.status(findError ? 500 : 404).json({
+                            success: false,
+                            message: findError ? "Failed to authorize delivery" : "Delivery not found"
+                        }));
+                    }
+                    db.query(
+                        `UPDATE deliveries
+                         SET status = ?, actual_time = CASE WHEN ? = 'DELIVERED' THEN CURRENT_TIME ELSE actual_time END,
+                             failure_reason_id = ?, remarks = ?
+                         WHERE delivery_id = ? AND partner_id = ?
+                           AND (editable_until IS NULL OR editable_until >= CURRENT_TIMESTAMP)`,
+                        [status, status, failureReasonId, remarks, deliveryId, identity.partner_id],
+                        (updateError, updateResult) => {
+                            if (updateError) {
+                                return db.rollback(() => res.status(500).json({ success: false, message: "Failed to update delivery" }));
+                            }
+                            if (!updateResult.affectedRows) {
+                                return db.rollback(() => res.status(409).json({ success: false, message: "This delivery is no longer editable" }));
+                            }
+                            const updateItems = itemStatuses.length
+                                ? itemStatuses.map((item) => new Promise((resolve, reject) => {
+                                    db.query(
+                                        "UPDATE delivery_items SET status = ?, reason_id = ?, remarks = ? WHERE delivery_item_id = ? AND delivery_id = ?",
+                                        [String(item.status || "").toUpperCase(), item.reason_id || null, item.remarks || null, item.delivery_item_id, deliveryId],
+                                        (error) => error ? reject(error) : resolve()
+                                    );
+                                }))
+                                : (status === "DELIVERED" || status === "NOT_DELIVERED"
+                                    ? [new Promise((resolve, reject) => db.query(
+                                        "UPDATE delivery_items SET status = ? WHERE delivery_id = ?",
+                                        [status === "DELIVERED" ? "DELIVERED" : "NOT_DELIVERED", deliveryId],
+                                        (error) => error ? reject(error) : resolve()
+                                    ))]
+                                    : []);
+                            Promise.all(updateItems).then(() => {
+                                db.commit((commitError) => {
+                                    if (commitError) {
+                                        return db.rollback(() => res.status(500).json({ success: false, message: "Failed to save delivery update" }));
+                                    }
+                                    res.json({ success: true, message: "Delivery status updated" });
+                                });
+
+                                app.get("/api/partner/payments", (req, res) => {
+                                    withRole(req, res, "DELIVERY_PARTNER", (identity) => {
+                                        db.query(`
+                                            SELECT partner_payment_id, partner_id, payment_period, amount,
+                                                   status, paid_at
+                                            FROM partner_payments
+                                            WHERE partner_id = ?
+                                            ORDER BY period_start DESC`,
+                                            [identity.partner_id],
+                                            (err, rows) => {
+                                                if (err) return res.status(500).json({ success: false, message: "Failed to load partner payments" });
+                                                res.json({ success: true, payments: rows });
+                                            }
+                                        );
+                                    });
+                                });
+
+                                app.get("/api/partner/notifications", (req, res) => {
+                                    withRole(req, res, "DELIVERY_PARTNER", (identity) => {
+                                        db.query(`
+                                            SELECT notification_id, user_id, notification_type, title, message,
+                                                   reference_type, reference_id, is_read, created_at
+                                            FROM notifications
+                                            WHERE user_id = ?
+                                            ORDER BY created_at DESC`,
+                                            [identity.user_id],
+                                            (err, rows) => {
+                                                if (err) return res.status(500).json({ success: false, message: "Failed to load partner notifications" });
+                                                res.json({ success: true, notifications: rows });
+                                            }
+                                        );
+                                    });
+                                });
+                            }).catch(() => db.rollback(() => res.status(500).json({ success: false, message: "Failed to update delivery items" })));
+                        }
+                    );
+                }
+            );
+        });
+    });
 });
 
 // =========================================

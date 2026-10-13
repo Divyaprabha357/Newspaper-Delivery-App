@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/role_api_service.dart';
+import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'partner_models.dart';
@@ -22,16 +24,16 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[
-      Text(widget.customer.name, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+      Text(widget.customer.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
       Text('${widget.customer.address}\n${widget.customer.area}', style: const TextStyle(color: DailyColors.gray, height: 1.5)),
       const SizedBox(height: 22),
-      const Text('DELIVERY INSTRUCTIONS', style: TextStyle(fontSize: 10, letterSpacing: 1.3, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+      const Text('DELIVERY INSTRUCTIONS', style: TextStyle(fontSize: 14, letterSpacing: 1.3, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
       const SizedBox(height: 8),
       Text(widget.customer.instructions),
       const SizedBox(height: 25),
-      const Text("TODAY'S NEWSPAPERS", style: TextStyle(fontSize: 10, letterSpacing: 1.3, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
-      ...widget.customer.newspapers.map((paper) => ListTile(contentPadding: EdgeInsets.zero, leading: Icon(delivered ? Icons.check_circle : Icons.circle_outlined, color: delivered ? DailyColors.success : DailyColors.gray), title: Text(paper), trailing: Text(widget.customer.time, style: const TextStyle(fontSize: 11, color: DailyColors.gray)))),
+      const Text("TODAY'S NEWSPAPERS", style: TextStyle(fontSize: 14, letterSpacing: 1.3, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+      ...widget.customer.newspapers.map((paper) => ListTile(contentPadding: EdgeInsets.zero, leading: Icon(delivered ? Icons.check_circle : Icons.circle_outlined, color: delivered ? DailyColors.success : DailyColors.gray), title: Text(paper), trailing: Text(widget.customer.time, style: const TextStyle(fontSize: 12, color: DailyColors.gray)))),
       const SizedBox(height: 18),
       Text('STATUS: ${delivered ? 'DELIVERED' : 'NOT DELIVERED'}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
       const SizedBox(height: 28),
@@ -64,8 +66,37 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
               )),
               PrimaryButton(
                 label: 'CONFIRM DELIVERY',
-                onPressed: () {
+                onPressed: () async {
                   if (selected.any((value) => value)) {
+                    final session = await RoleSessionService.getPartner();
+                    final userId = int.tryParse('${session?['user_id']}');
+                    if (userId == null || widget.customer.deliveryId == null) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This delivery is not connected to the server.')));
+                      }
+                      return;
+                    }
+                    try {
+                      await RoleApiService(
+                        authToken: session?['session_token']?.toString(),
+                      ).updatePartnerDelivery(
+                        userId: userId,
+                        deliveryId: widget.customer.deliveryId!,
+                        status: selected.every((value) => value) ? 'DELIVERED' : 'PARTIALLY_DELIVERED',
+                        items: [
+                          for (var index = 0; index < widget.customer.itemIds.length; index++)
+                            {
+                              'delivery_item_id': widget.customer.itemIds[index],
+                              'status': selected.length > index && selected[index] ? 'DELIVERED' : 'NOT_DELIVERED',
+                            },
+                        ],
+                      );
+                    } on RoleApiException catch (error) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+                      }
+                      return;
+                    }
                     Navigator.pop(context);
                     setState(() => delivered = true);
                   }

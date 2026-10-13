@@ -35,9 +35,9 @@ class PartnerProfileScreen extends StatelessWidget {
                 CircleAvatar(radius: 28, backgroundColor: DailyColors.burgundy, child: Text('R', style: TextStyle(color: Colors.white, fontSize: 24))),
                 SizedBox(width: 15),
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('Rahul Patil', style: TextStyle(fontSize: 19, fontWeight: FontWeight.bold)),
+                  Text('Rahul Patil', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 5),
-                  Text('DP001  •  Available', style: TextStyle(color: DailyColors.burgundy, fontSize: 11)),
+                  Text('DP001  â€¢  Available', style: TextStyle(color: DailyColors.burgundy, fontSize: 12)),
                 ]),
               ]),
             ),
@@ -59,7 +59,7 @@ class PartnerProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _info(String label, String value) => Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Row(children: [Expanded(child: Text(label, style: const TextStyle(color: DailyColors.gray, fontSize: 12))), Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13))]));
+  Widget _info(String label, String value) => Padding(padding: const EdgeInsets.fromLTRB(24, 0, 24, 8), child: Row(children: [Expanded(child: Text(label, style: const TextStyle(color: DailyColors.gray, fontSize: 12))), Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))]));
 }
 
 class PartnerProfileSubScreen extends StatefulWidget {
@@ -111,9 +111,11 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
       case ProfileSubScreen.notifications:
         return Column(children: ['Delivery updates', 'Route updates', 'Payment updates', 'Issue updates', 'System notifications'].map((item) => SwitchListTile(contentPadding: EdgeInsets.zero, value: true, activeColor: DailyColors.burgundy, onChanged: (_) {}, title: Text(item))).toList());
       case ProfileSubScreen.help:
-        return const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), SizedBox(height: 18), Text('How do I start my route?', style: TextStyle(fontWeight: FontWeight.bold)), SizedBox(height: 6), Text('Open Today’s Route from your dashboard and select START ROUTE.', style: TextStyle(color: DailyColors.gray, height: 1.5)), SizedBox(height: 20), Text('Contact Support', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), SizedBox(height: 8), Text('Support is available for route, delivery and account issues.', style: TextStyle(color: DailyColors.gray))]);
+        return const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), SizedBox(height: 18), Text('How do I start my route?', style: TextStyle(fontWeight: FontWeight.bold)), SizedBox(height: 6), Text('Open Todayâ€™s Route from your dashboard and select START ROUTE.', style: TextStyle(color: DailyColors.gray, height: 1.5)), SizedBox(height: 20), Text('Contact Support', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)), SizedBox(height: 8), Text('Support is available for route, delivery and account issues.', style: TextStyle(color: DailyColors.gray))]);
     }
   }
 
   Widget _form(List<Widget> children) => Column(crossAxisAlignment: CrossAxisAlignment.start, children: [...children, const SizedBox(height: 26), PrimaryButton(label: 'SAVE CHANGES', onPressed: widget.onBack)]);
 }
+
+

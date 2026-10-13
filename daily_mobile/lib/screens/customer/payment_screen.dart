@@ -54,7 +54,7 @@ class PaymentScreen extends StatelessWidget {
                         const Text(
                           '₹300',
                           style: TextStyle(
-                            fontSize: 25,
+                            fontSize: 24,
                             fontWeight: FontWeight.bold,
                             color: DailyColors.burgundy,
                           ),
@@ -65,7 +65,7 @@ class PaymentScreen extends StatelessWidget {
                         const Text(
                           'DUE ON 10 SEP 2026',
                           style: TextStyle(
-                            fontSize: 8,
+                            fontSize: 12,
                             color: DailyColors.gray,
                           ),
                         ),
@@ -116,7 +116,7 @@ class PaymentScreen extends StatelessWidget {
 
                     child: const Text(
                       'No payment scheduled for next billing cycle.',
-                      style: TextStyle(fontSize: 8, color: DailyColors.gray),
+                      style: TextStyle(fontSize: 12, color: DailyColors.gray),
                     ),
                   ),
 
@@ -133,7 +133,7 @@ class PaymentScreen extends StatelessWidget {
                         child: const Text(
                           'RECENT',
                           style: TextStyle(
-                            fontSize: 8,
+                            fontSize: 12,
                             color: DailyColors.burgundy,
                           ),
                         ),
@@ -170,7 +170,7 @@ class PaymentScreen extends StatelessWidget {
                                         child: Text(
                                           t.$1,
                                           style: const TextStyle(
-                                            fontSize: 17,
+                                            fontSize: 16,
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
@@ -185,9 +185,9 @@ class PaymentScreen extends StatelessWidget {
                                         WrapCrossAlignment.center,
                                     children: [
                                       Text(
-                                        '${t.$2}  •  ${t.$3}',
+                                        '${t.$2}  â€¢  ${t.$3}',
                                         style: const TextStyle(
-                                          fontSize: 15,
+                                          fontSize: 16,
                                           fontWeight: FontWeight.bold,
                                           color: DailyColors.burgundy,
                                         ),
@@ -272,7 +272,7 @@ class PaymentScreen extends StatelessWidget {
                           child: Text(
                             'Dispute a Transaction?\n'
                             'Report a billing issue from Service Requests.',
-                            style: TextStyle(fontSize: 9, height: 1.4),
+                            style: TextStyle(fontSize: 12, height: 1.4),
                           ),
                         ),
                       ],
@@ -314,7 +314,7 @@ class PaymentScreen extends StatelessWidget {
               const Text(
                 'DAILY',
                 style: TextStyle(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                   color: DailyColors.burgundy,
                 ),
@@ -328,14 +328,14 @@ class PaymentScreen extends StatelessWidget {
 
               Text(
                 'NEWSPAPER\n$newspaper',
-                style: const TextStyle(fontSize: 10, height: 1.5),
+                style: const TextStyle(fontSize: 14, height: 1.5),
               ),
 
               const SizedBox(height: 10),
 
               Text(
                 'PAYMENT DATE\n$date',
-                style: const TextStyle(fontSize: 10, height: 1.5),
+                style: const TextStyle(fontSize: 14, height: 1.5),
               ),
 
               const SizedBox(height: 10),
@@ -343,7 +343,7 @@ class PaymentScreen extends StatelessWidget {
               Text(
                 'AMOUNT PAID\n$amount',
                 style: const TextStyle(
-                  fontSize: 10,
+                  fontSize: 14,
                   height: 1.5,
                   fontWeight: FontWeight.bold,
                 ),
@@ -354,7 +354,7 @@ class PaymentScreen extends StatelessWidget {
               const Text(
                 'STATUS\nPAID',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 14,
                   height: 1.5,
                   color: DailyColors.success,
                   fontWeight: FontWeight.bold,
@@ -369,7 +369,7 @@ class PaymentScreen extends StatelessWidget {
 
               const Text(
                 'Thank you for using DAILY.',
-                style: TextStyle(fontSize: 9, color: DailyColors.gray),
+                style: TextStyle(fontSize: 12, color: DailyColors.gray),
               ),
             ],
           ),
@@ -383,7 +383,7 @@ class PaymentScreen extends StatelessWidget {
               child: const Text(
                 'CLOSE',
                 style: TextStyle(
-                  fontSize: 9,
+                  fontSize: 12,
                   color: DailyColors.burgundy,
                   fontWeight: FontWeight.bold,
                 ),
@@ -415,12 +415,12 @@ class PaymentScreen extends StatelessWidget {
 
             Text(
               n,
-              style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             ),
 
             Text(
               p,
-              style: const TextStyle(fontSize: 8, color: DailyColors.gray),
+              style: const TextStyle(fontSize: 12, color: DailyColors.gray),
             ),
           ],
         ),
@@ -428,3 +428,5 @@ class PaymentScreen extends StatelessWidget {
     );
   }
 }
+
+

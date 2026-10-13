@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/mobile_role_design.dart';
 import '../../widgets/daily_widgets.dart';
 import '../../services/session_service.dart';
+import '../../services/customer_api_service.dart';
 import 'customer_dashboard_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -16,6 +18,7 @@ class AuthScreen extends StatefulWidget {
 class _AuthScreenState extends State<AuthScreen> {
   bool login = true;
   bool usePhone = false;
+  bool loading = false;
   final identifier = TextEditingController();
   final password = TextEditingController();
   final fullName = TextEditingController();
@@ -44,7 +47,9 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return Theme(
+      data: MobileRoleDesign.theme(context),
+      child: Scaffold(
       backgroundColor: DailyColors.cream,
       body: SafeArea(
         child: Column(
@@ -66,7 +71,7 @@ class _AuthScreenState extends State<AuthScreen> {
                     Text(
                       login ? 'Welcome Back' : 'Create Account',
                       style: const TextStyle(
-                        fontSize: 28,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -76,7 +81,7 @@ class _AuthScreenState extends State<AuthScreen> {
                           ? 'Sign in to your ${_roleName()} account.'
                           : 'Set up your ${_roleName()} account.',
                       style: const TextStyle(
-                        fontSize: 13,
+                        fontSize: 14,
                         color: DailyColors.gray,
                       ),
                     ),
@@ -112,6 +117,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ],
         ),
       ),
+      ),
     );
   }
 
@@ -129,7 +135,7 @@ class _AuthScreenState extends State<AuthScreen> {
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
             color: active ? Colors.white : DailyColors.charcoal,
@@ -194,12 +200,15 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
         const SizedBox(height: 7),
-        PrimaryButton(label: 'LOGIN', onPressed: _login),
+        PrimaryButton(
+          label: loading ? 'SIGNING IN...' : 'LOGIN',
+          onPressed: loading ? () {} : _login,
+        ),
         const SizedBox(height: 18),
         const Center(
           child: Text(
             'OR',
-            style: TextStyle(fontSize: 10, color: DailyColors.gray),
+            style: TextStyle(fontSize: 14, color: DailyColors.gray),
           ),
         ),
         const SizedBox(height: 12),
@@ -216,7 +225,7 @@ class _AuthScreenState extends State<AuthScreen> {
             label: const Text(
               'CONTINUE WITH GOOGLE',
               style: TextStyle(
-                fontSize: 10,
+                fontSize: 14,
                 letterSpacing: .8,
                 color: DailyColors.charcoal,
               ),
@@ -312,7 +321,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(width: 6),
           Text(
             title,
-            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -331,7 +340,7 @@ class _AuthScreenState extends State<AuthScreen> {
     children: [
       Text(
         label,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 7),
       TextField(
@@ -358,15 +367,30 @@ class _AuthScreenState extends State<AuthScreen> {
       _snack('Enter your login details.');
       return;
     }
-    if (widget.role == 'CUSTOMER') {
-      await SessionService.setCustomerLoggedIn();
+    if (widget.role != 'CUSTOMER') {
+      _snack('${_roleName()} dashboard will be connected next.');
+      return;
+    }
+    setState(() => loading = true);
+    try {
+      final data = await CustomerApiService().login(
+        emailOrPhone: identifier.text.trim(),
+        password: password.text,
+      );
+      final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
+      if (user['role'] != 'CUSTOMER' || user['customer_id'] == null) {
+        throw const CustomerApiException('This account is not a Customer account.', statusCode: 403);
+      }
+      await SessionService.saveCustomer(user);
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const CustomerDashboardScreen()),
       );
-    } else {
-      _snack('${_roleName()} dashboard will be connected next.');
+    } on CustomerApiException catch (error) {
+      if (mounted) _snack(error.message);
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
@@ -386,10 +410,12 @@ class _AuthScreenState extends State<AuthScreen> {
       _snack('Passwords do not match.');
       return;
     }
-    _snack('Account created successfully.');
+    _snack('Customer signup is not available because server.js has no customer registration endpoint.');
   }
 
   void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text(message), backgroundColor: DailyColors.burgundy),
   );
 }
+
+

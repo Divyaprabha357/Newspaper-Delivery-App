@@ -78,14 +78,14 @@ class ServiceRequestScreen extends StatelessWidget {
                                   Text(
                                     r.$1,
                                     style: const TextStyle(
-                                      fontSize: 10,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   Text(
                                     r.$2,
                                     style: const TextStyle(
-                                      fontSize: 8,
+                                      fontSize: 12,
                                       color: DailyColors.gray,
                                     ),
                                   ),
@@ -122,7 +122,7 @@ class ServiceRequestScreen extends StatelessWidget {
                           child: Text(
                             'Need instant help?\nOur customer support team is available for urgent delivery issues. CONTACT SUPPORT →',
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 12,
                               height: 1.5,
                               color: DailyColors.burgundy,
                               fontWeight: FontWeight.w600,
@@ -170,3 +170,5 @@ class ServiceRequestScreen extends StatelessWidget {
     );
   }
 }
+
+

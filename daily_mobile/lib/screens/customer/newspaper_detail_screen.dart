@@ -55,7 +55,7 @@ class NewspaperDetailScreen extends StatelessWidget {
                           child: Text(
                             name,
                             style: const TextStyle(
-                              fontSize: 28,
+                              fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -70,7 +70,7 @@ class NewspaperDetailScreen extends StatelessWidget {
                           child: const Text(
                             'POPULAR',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 14,
                               color: DailyColors.burgundy,
                               fontWeight: FontWeight.bold,
                             ),
@@ -104,7 +104,7 @@ class NewspaperDetailScreen extends StatelessWidget {
                           _row(
                             Icons.calendar_month_outlined,
                             'Frequency',
-                            'Monday – Sunday',
+                            'Monday â€“ Sunday',
                           ),
                         ],
                       ),
@@ -139,9 +139,9 @@ class NewspaperDetailScreen extends StatelessWidget {
 
                     // What's included
                     const Text(
-                      'What’s Included',
+                      'Whatâ€™s Included',
                       style: TextStyle(
-                        fontSize: 19,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -164,7 +164,7 @@ class NewspaperDetailScreen extends StatelessWidget {
                               color: DailyColors.oliveDark,
                             ),
                             const SizedBox(width: 6),
-                            Text(x, style: const TextStyle(fontSize: 13)),
+                            Text(x, style: const TextStyle(fontSize: 14)),
                           ],
                         ),
                       ),
@@ -182,7 +182,7 @@ class NewspaperDetailScreen extends StatelessWidget {
                               const Text(
                                 'MONTHLY PRICE',
                                 style: TextStyle(
-                                  fontSize: 10,
+                                  fontSize: 14,
                                   color: DailyColors.gray,
                                   letterSpacing: 1,
                                 ),
@@ -286,7 +286,7 @@ class NewspaperDetailScreen extends StatelessWidget {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -294,3 +294,5 @@ class NewspaperDetailScreen extends StatelessWidget {
     );
   }
 }
+
+

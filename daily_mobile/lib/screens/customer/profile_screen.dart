@@ -9,6 +9,7 @@ import 'notifications_screen.dart';
 import 'profile_details_screen.dart';
 import 'service_request_screen.dart';
 import '../../services/session_service.dart';
+import '../../services/customer_api_service.dart';
 import '../welcome_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -20,6 +21,29 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String _query = '';
+  bool _loading = true;
+  String? _error;
+  Map<String, dynamic> _customer = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final id = await SessionService.getCustomerId();
+    if (id == null) {
+      if (mounted) setState(() { _loading = false; _error = 'Your session has expired.'; });
+      return;
+    }
+    try {
+      final response = await CustomerApiService().profile(id);
+      if (mounted) setState(() { _customer = Map<String, dynamic>.from(response['user'] as Map? ?? {}); _loading = false; });
+    } on CustomerApiException catch (e) {
+      if (mounted) setState(() { _loading = false; _error = e.message; });
+    }
+  }
 
   bool _matches(String text) {
     return _query.isEmpty || text.toLowerCase().contains(_query);
@@ -27,6 +51,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator(color: DailyColors.burgundy)));
+    }
+    if (_error != null) {
+      return Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Text(_error!), TextButton(onPressed: () { setState(() { _loading = true; _error = null; }); _loadProfile(); }, child: const Text('TRY AGAIN')),
+      ])));
+    }
     return Scaffold(
       backgroundColor: DailyColors.cream,
       body: SafeArea(
@@ -74,9 +106,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Center(
+                  Center(
                     child: Text(
-                      'Divyaprabha Seenivasagam',
+                      _customer['name'] as String? ?? 'Customer',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -84,9 +116,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 3),
-                  const Center(
+                  Center(
                     child: Text(
-                      'divyaprabha@gmail.com',
+                      _customer['email'] as String? ?? '—',
                       style: TextStyle(fontSize: 12, color: DailyColors.gray),
                     ),
                   ),
@@ -171,7 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         child: const Text(
                           'VIEW FEEDBACK & ALERTS',
-                          style: TextStyle(fontSize: 11),
+                          style: TextStyle(fontSize: 12),
                         ),
                       ),
                     ],
@@ -200,7 +232,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: const Text(
                         'LOG OUT',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: 12,
                           color: DailyColors.burgundy,
                           fontWeight: FontWeight.bold,
                         ),
@@ -228,7 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(icon, size: 19, color: DailyColors.burgundy),
             const SizedBox(width: 10),
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 13))),
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
             const Icon(Icons.chevron_right, size: 20, color: DailyColors.gray),
           ],
         ),
@@ -268,3 +300,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 }
+
+

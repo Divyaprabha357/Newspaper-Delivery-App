@@ -6,6 +6,9 @@ class RouteCustomer {
   final String time;
   final List<String> newspapers;
   final String instructions;
+  final int? deliveryId;
+  final int? customerId;
+  final List<int> itemIds;
 
   const RouteCustomer({
     required this.number,
@@ -15,6 +18,9 @@ class RouteCustomer {
     required this.time,
     required this.newspapers,
     required this.instructions,
+    this.deliveryId,
+    this.customerId,
+    this.itemIds = const [],
   });
 }
 

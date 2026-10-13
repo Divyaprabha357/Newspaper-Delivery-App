@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../theme/app_theme.dart';
+import '../../theme/mobile_role_design.dart';
 import '../../widgets/daily_widgets.dart';
+import '../../services/customer_api_service.dart';
+import '../../services/session_service.dart';
 
 import 'delivery_history_screen.dart';
 import 'subscription_catalog_screen.dart';
@@ -21,6 +24,38 @@ class CustomerDashboardScreen extends StatefulWidget {
 
 class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
   int index = 0;
+  bool loading = true;
+  String? loadError;
+  Map<String, dynamic>? customer;
+  List<dynamic> subscriptions = [];
+  List<dynamic> deliveries = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCustomerData();
+  }
+
+  Future<void> _loadCustomerData() async {
+    final customerId = await SessionService.getCustomerId();
+    if (customerId == null) {
+      if (mounted) setState(() { loading = false; loadError = 'Your session has expired. Please sign in again.'; });
+      return;
+    }
+    try {
+      final api = CustomerApiService();
+      final results = await Future.wait([api.profile(customerId), api.subscriptions(customerId), api.deliveryHistory(customerId)]);
+      if (!mounted) return;
+      setState(() {
+        customer = Map<String, dynamic>.from(results[0]['user'] as Map? ?? {});
+        subscriptions = List<dynamic>.from(results[1]['subscriptions'] as List? ?? []);
+        deliveries = List<dynamic>.from(results[2]['deliveries'] as List? ?? []);
+        loading = false;
+      });
+    } on CustomerApiException catch (error) {
+      if (mounted) setState(() { loading = false; loadError = error.message; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,55 +66,11 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
       const ProfileScreen(),
     ];
 
-    return Scaffold(
+    return Theme(
+      data: MobileRoleDesign.theme(context),
+      child: Scaffold(
       backgroundColor: DailyColors.cream,
       extendBody: true,
-      drawer: Drawer(
-        backgroundColor: DailyColors.cream,
-        child: SafeArea(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
-            children: [
-              const Text(
-                'DAILY',
-                style: TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  color: DailyColors.burgundy,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Divider(color: DailyColors.divider),
-              _drawerItem(context, 'Home', Icons.home_outlined, 0),
-              _drawerItem(
-                context,
-                'Subscriptions',
-                Icons.menu_book_outlined,
-                1,
-              ),
-              _drawerItem(context, 'Payments', Icons.credit_card_outlined, 2),
-              _drawerItem(context, 'Profile', Icons.person_outline, 3),
-              const Divider(color: DailyColors.divider),
-              ListTile(
-                leading: const Icon(
-                  Icons.support_agent_outlined,
-                  color: DailyColors.burgundy,
-                ),
-                title: const Text('Ask Help'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ServiceRequestScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
       body: SafeArea(child: pages[index]),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
@@ -91,7 +82,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
         icon: const Icon(Icons.support_agent_outlined, size: 20),
         label: const Text(
           'ASK HELP',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
@@ -103,10 +94,29 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           });
         },
       ),
+      ),
     );
   }
 
   Widget _home() {
+    if (loading) {
+      return const Center(child: CircularProgressIndicator(color: DailyColors.burgundy));
+    }
+    if (loadError != null) {
+      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.cloud_off_outlined, color: DailyColors.burgundy, size: 40),
+        const SizedBox(height: 12),
+        Text(loadError!, textAlign: TextAlign.center),
+        const SizedBox(height: 14),
+        OutlinedButton(onPressed: () { setState(() { loading = true; loadError = null; }); _loadCustomerData(); }, child: const Text('TRY AGAIN')),
+      ])));
+    }
+    final firstName = (customer?['name'] as String? ?? 'Reader').split(' ').first;
+    final latestDelivery = deliveries.isNotEmpty ? Map<String, dynamic>.from(deliveries.first as Map) : null;
+    final latestName = latestDelivery?['newspaper_name'] as String? ?? 'No delivery recorded';
+    final latestStatus = latestDelivery?['item_status'] ?? latestDelivery?['delivery_status'] ?? 'Awaiting delivery';
+    final latestTime = latestDelivery?['actual_time'] ?? latestDelivery?['scheduled_time'] ?? '—';
+    final partnerName = latestDelivery?['partner_name'] ?? 'Not assigned';
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(22, 15, 22, 120),
       child: Column(
@@ -114,13 +124,6 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
         children: [
           DailyHeader(
             title: 'DAILY',
-            leading: Builder(
-              builder: (context) => IconButton(
-                onPressed: () => Scaffold.of(context).openDrawer(),
-                icon: const Icon(Icons.menu, size: 24),
-                tooltip: 'Open menu',
-              ),
-            ),
             trailing: IconButton(
               onPressed: () {
                 Navigator.push(
@@ -134,9 +137,9 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
             ),
           ),
 
-          const Text(
-            'Welcome back, Reader',
-            style: TextStyle(fontSize: 23, fontWeight: FontWeight.bold),
+          Text(
+            'Welcome back, $firstName',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
 
           const SizedBox(height: 18),
@@ -157,7 +160,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                 },
                 child: const Text(
                   'History →',
-                  style: TextStyle(color: DailyColors.burgundy, fontSize: 10),
+                  style: TextStyle(color: DailyColors.burgundy, fontSize: 14),
                 ),
               ),
             ],
@@ -186,10 +189,10 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'The Times of India',
+                      Text(
+                        latestName,
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -202,26 +205,26 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
 
                           const SizedBox(width: 6),
 
-                          const Text(
-                            'Delivered • 7:02 AM',
-                            style: TextStyle(fontSize: 10),
+                          Text(
+                            '${latestStatus.toString().replaceAll('_', ' ')} â€¢ $latestTime',
+                            style: TextStyle(fontSize: 14),
                           ),
 
                           const Spacer(),
 
-                          const Text(
-                            'Rahul Patil',
+                          Text(
+                            '$partnerName',
                             style: TextStyle(
-                              fontSize: 9,
+                              fontSize: 12,
                               color: DailyColors.gray,
                             ),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        'Supplier: National Daily Editions',
-                        style: TextStyle(fontSize: 11, color: DailyColors.gray),
+                      Text(
+                        'Supplier: ${latestDelivery?['supplier_name'] ?? '—'}',
+                        style: TextStyle(fontSize: 12, color: DailyColors.gray),
                       ),
 
                       const SizedBox(height: 9),
@@ -238,7 +241,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                           ),
                           child: const Text(
                             'VIEW DETAILS',
-                            style: TextStyle(fontSize: 9, letterSpacing: 1),
+                            style: TextStyle(fontSize: 12, letterSpacing: 1),
                           ),
                         ),
                       ),
@@ -255,7 +258,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           Row(
             children: [
               Expanded(
-                child: _metric('ACTIVE\nSUBSCRIPTIONS', '2', 'VIEW ALL', () {
+                child: _metric('ACTIVE\nSUBSCRIPTIONS', '${subscriptions.where((item) => item['status'] == 'ACTIVE').length}', 'VIEW ALL', () {
                   setState(() {
                     index = 1;
                   });
@@ -265,7 +268,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
               const SizedBox(width: 10),
 
               Expanded(
-                child: _metric('PENDING\nPAYMENT', '₹356', 'PAY NOW', () {
+                child: _metric('PENDING\nPAYMENT', '—', 'VIEW PAYMENTS', () {
                   setState(() {
                     index = 2;
                   });
@@ -278,8 +281,13 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
 
           const SectionLabel('Active Subscriptions'),
           const SizedBox(height: 8),
-          _subscriptionSummary('The Times of India', 'Active • 7:30 AM'),
-          _subscriptionSummary('The Hindu', 'Active • 7:30 AM'),
+          if (subscriptions.isEmpty)
+            const Text('No active subscriptions.', style: TextStyle(color: DailyColors.gray))
+          else
+            ...subscriptions.take(3).map((item) => _subscriptionSummary(
+              item['newspaper_name'] as String? ?? 'Newspaper',
+              '${item['status'] ?? '—'} â€¢ ${item['scheduled_delivery_time'] ?? '—'}',
+            )),
 
           const SizedBox(height: 18),
 
@@ -330,7 +338,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           Text(
             title,
             style: const TextStyle(
-              fontSize: 8,
+              fontSize: 12,
               letterSpacing: 1.2,
               color: DailyColors.gray,
             ),
@@ -341,7 +349,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           Text(
             value,
             style: const TextStyle(
-              fontSize: 25,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: DailyColors.charcoal,
             ),
@@ -354,7 +362,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
             child: Text(
               action,
               style: const TextStyle(
-                fontSize: 8,
+                fontSize: 12,
                 color: DailyColors.burgundy,
                 fontWeight: FontWeight.bold,
               ),
@@ -379,29 +387,12 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
 
             const SizedBox(width: 10),
 
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 10))),
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
 
             const Icon(Icons.chevron_right, size: 18, color: DailyColors.gray),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _drawerItem(
-    BuildContext context,
-    String title,
-    IconData icon,
-    int destination,
-  ) {
-    return ListTile(
-      leading: Icon(icon, color: DailyColors.burgundy),
-      title: Text(title, style: const TextStyle(fontSize: 15)),
-      trailing: const Icon(Icons.chevron_right, color: DailyColors.gray),
-      onTap: () {
-        Navigator.pop(context);
-        setState(() => index = destination);
-      },
     );
   }
 
@@ -427,10 +418,12 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           ),
           Text(
             details,
-            style: const TextStyle(fontSize: 11, color: DailyColors.gray),
+            style: const TextStyle(fontSize: 12, color: DailyColors.gray),
           ),
         ],
       ),
     );
   }
 }
+
+

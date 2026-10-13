@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../widgets/daily_widgets.dart';
 import 'customer/auth_screen.dart';
 import 'delivery_partner/delivery_partner_app_screen.dart';
+import 'supplier/supplier_login_screen.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
@@ -13,6 +14,13 @@ class RoleSelectionScreen extends StatelessWidget {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const DeliveryPartnerAppScreen()),
+      );
+      return;
+    }
+    if (role == 'SUPPLIER') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const SupplierLoginScreen()),
       );
       return;
     }

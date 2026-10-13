@@ -34,7 +34,7 @@ class LoginMethodScreen extends StatelessWidget {
                     const Text(
                       'SIGN IN',
                       style: TextStyle(
-                        fontSize: 38,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: Color(0xFF2B2A28),
                       ),
@@ -149,7 +149,7 @@ class _LoginOption extends StatelessWidget {
               child: Text(
                 title,
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
                   color: Color(0xFF2B2A28),
@@ -164,3 +164,5 @@ class _LoginOption extends StatelessWidget {
     );
   }
 }
+
+

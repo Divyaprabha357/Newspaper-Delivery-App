@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../services/role_api_service.dart';
+import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'partner_widgets.dart';
@@ -25,6 +27,7 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
   final emergency = TextEditingController();
   final registration = TextEditingController();
   String vehicle = 'Motorcycle';
+  bool loading = false;
 
   @override
   void dispose() {
@@ -43,9 +46,9 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
       child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(28, 26, 28, 30),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('WELCOME BACK', style: TextStyle(fontSize: 11, letterSpacing: 1.7, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+          const Text('WELCOME BACK', style: TextStyle(fontSize: 12, letterSpacing: 1.7, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          const Text('Partner sign in', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold)),
+          const Text('Partner sign in', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text('Access your routes, delivery history and earnings.', style: TextStyle(color: DailyColors.gray, height: 1.5)),
           const SizedBox(height: 30),
@@ -53,11 +56,30 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
           const SizedBox(height: 16),
           PartnerField(label: 'Password', hint: 'Enter your password', controller: password, icon: Icons.lock_outline, obscure: true),
           const SizedBox(height: 12),
-          PrimaryButton(label: 'SIGN IN', onPressed: () {
+          PrimaryButton(label: loading ? 'SIGNING IN...' : 'SIGN IN', onPressed: () async {
+            if (loading) return;
             if (code.text.isEmpty || password.text.isEmpty) {
               _message('Enter your partner code and password.');
-            } else {
-              widget.onSignedIn();
+              return;
+            }
+            setState(() => loading = true);
+            try {
+              final response = await RoleApiService().login(
+                partnerCode: code.text.trim(),
+                password: password.text,
+              );
+              final user = Map<String, dynamic>.from(response['user'] as Map? ?? {});
+              if ((user['role'] ?? '').toString().toUpperCase() != 'DELIVERY_PARTNER') {
+                throw const RoleApiException('This account is not authorized for the Delivery Partner workspace.');
+              }
+              await RoleSessionService.savePartner(user);
+              if (mounted) widget.onSignedIn();
+            } on RoleApiException catch (error) {
+              if (mounted) _message(error.message);
+            } catch (_) {
+              if (mounted) _message('Unable to sign in to the Delivery Partner workspace.');
+            } finally {
+              if (mounted) setState(() => loading = false);
             }
           }),
           const SizedBox(height: 24),
@@ -78,7 +100,7 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
           Row(children: List.generate(labels.length, (index) => Expanded(child: Column(children: [
             Container(height: 4, margin: const EdgeInsets.only(right: 4), color: index <= step ? DailyColors.burgundy : DailyColors.divider),
             const SizedBox(height: 7),
-            Text(labels[index], style: TextStyle(fontSize: 9, color: index == step ? DailyColors.burgundy : DailyColors.gray, fontWeight: FontWeight.bold)),
+            Text(labels[index], style: TextStyle(fontSize: 12, color: index == step ? DailyColors.burgundy : DailyColors.gray, fontWeight: FontWeight.bold)),
           ])))),
           const SizedBox(height: 30),
           if (step == 0) ...[

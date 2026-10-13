@@ -50,7 +50,7 @@ class PartnerField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, letterSpacing: 1.1, fontWeight: FontWeight.bold, color: DailyColors.gray)),
+        Text(label.toUpperCase(), style: const TextStyle(fontSize: 14, letterSpacing: 1.1, fontWeight: FontWeight.bold, color: DailyColors.gray)),
         const SizedBox(height: 7),
         TextField(
           controller: controller,
@@ -70,7 +70,7 @@ class PartnerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 22, 24, 10),
-      child: Text(title, style: const TextStyle(fontSize: 10, letterSpacing: 1.5, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+      child: Text(title, style: const TextStyle(fontSize: 14, letterSpacing: 1.5, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
     );
   }
 }
@@ -91,9 +91,9 @@ class PartnerTop extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('DAILY DELIVERY PARTNER', style: TextStyle(fontSize: 9, letterSpacing: 1.4, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+                const Text('DAILY DELIVERY PARTNER', style: TextStyle(fontSize: 12, letterSpacing: 1.4, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 8),
-                Text(title, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold)),
+                Text(title, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
                 if (subtitle != null) ...[const SizedBox(height: 4), Text(subtitle!, style: const TextStyle(color: DailyColors.gray, fontSize: 12))],
               ],
             ),
@@ -126,3 +126,5 @@ class PartnerProgress extends StatelessWidget {
     );
   }
 }
+
+

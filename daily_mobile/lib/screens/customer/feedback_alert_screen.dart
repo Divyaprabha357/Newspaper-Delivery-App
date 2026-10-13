@@ -66,7 +66,7 @@ class FeedbackAlertScreen extends StatelessWidget {
                           'Subscription\nConfirmed!',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 19,
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -93,7 +93,7 @@ class FeedbackAlertScreen extends StatelessWidget {
                             ),
                             child: const Text(
                               'View Subscriptions',
-                              style: TextStyle(fontSize: 11),
+                              style: TextStyle(fontSize: 12),
                             ),
                           ),
                         ),
@@ -102,7 +102,7 @@ class FeedbackAlertScreen extends StatelessWidget {
                           child: const Text(
                             'Go to Home',
                             style: TextStyle(
-                              fontSize: 11,
+                              fontSize: 12,
                               color: DailyColors.charcoal,
                             ),
                           ),
@@ -119,3 +119,5 @@ class FeedbackAlertScreen extends StatelessWidget {
     );
   }
 }
+
+
