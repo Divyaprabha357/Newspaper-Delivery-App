@@ -1,9 +1,13 @@
 # Dependencies
 node_modules/
 
-# Environment variables
+# Environment variables and database credentials
 .env
 .env.*
+!.env.example
+
+# Aiven CA certificate
+ca.pem
 
 # Build files
 dist/
