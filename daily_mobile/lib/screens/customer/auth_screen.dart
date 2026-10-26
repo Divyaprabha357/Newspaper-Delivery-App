@@ -6,10 +6,12 @@ import '../../widgets/daily_widgets.dart';
 import '../../services/session_service.dart';
 import '../../services/customer_api_service.dart';
 import 'customer_dashboard_screen.dart';
+import '../role_selection_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   final String role;
-  const AuthScreen({super.key, required this.role});
+  final CustomerApiService? apiService;
+  const AuthScreen({super.key, required this.role, this.apiService});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
@@ -19,6 +21,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool login = true;
   bool usePhone = false;
   bool loading = false;
+  bool terms = false;
+  bool obscureLoginPassword = true;
   final identifier = TextEditingController();
   final password = TextEditingController();
   final fullName = TextEditingController();
@@ -58,8 +62,16 @@ class _AuthScreenState extends State<AuthScreen> {
               padding: const EdgeInsets.fromLTRB(22, 15, 22, 0),
               child: DailyHeader(
                 title: 'DAILY',
-                onBack: () =>
-                    Navigator.popUntil(context, (route) => route.isFirst),
+                onBack: () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                    );
+                  }
+                },
               ),
             ),
             Expanded(
@@ -179,6 +191,7 @@ class _AuthScreenState extends State<AuthScreen> {
           usePhone ? 'Enter your phone number' : 'Enter your email address',
           usePhone ? Icons.phone_outlined : Icons.email_outlined,
           identifier,
+          keyboardType: usePhone ? TextInputType.phone : TextInputType.emailAddress,
         ),
         const SizedBox(height: 15),
         _field(
@@ -186,7 +199,18 @@ class _AuthScreenState extends State<AuthScreen> {
           'Enter your password',
           Icons.lock_outline,
           password,
-          obscure: true,
+          obscure: obscureLoginPassword,
+          suffixIcon: IconButton(
+            icon: Icon(
+              obscureLoginPassword
+                  ? Icons.visibility_off_outlined
+                  : Icons.visibility_outlined,
+              color: DailyColors.gray,
+              size: 20,
+            ),
+            onPressed: () =>
+                setState(() => obscureLoginPassword = !obscureLoginPassword),
+          ),
         ),
         const SizedBox(height: 4),
         Align(
@@ -293,8 +317,22 @@ class _AuthScreenState extends State<AuthScreen> {
           confirmPassword,
           obscure: true,
         ),
-        const SizedBox(height: 22),
-        PrimaryButton(label: 'CREATE ACCOUNT', onPressed: _signup),
+        const SizedBox(height: 14),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          value: terms,
+          activeColor: DailyColors.burgundy,
+          onChanged: (v) => setState(() => terms = v ?? false),
+          title: const Text(
+            'I agree to the Terms & Conditions',
+            style: TextStyle(fontSize: 12),
+          ),
+        ),
+        const SizedBox(height: 18),
+        PrimaryButton(
+          label: loading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT',
+          onPressed: loading ? () {} : _signup,
+        ),
       ],
     );
   }
@@ -335,6 +373,8 @@ class _AuthScreenState extends State<AuthScreen> {
     TextEditingController controller, {
     bool obscure = false,
     int maxLines = 1,
+    Widget? suffixIcon,
+    TextInputType? keyboardType,
   }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -346,10 +386,12 @@ class _AuthScreenState extends State<AuthScreen> {
       TextField(
         controller: controller,
         obscureText: obscure,
+        keyboardType: keyboardType,
         maxLines: maxLines,
         decoration: InputDecoration(
           hintText: hint,
           prefixIcon: Icon(icon, color: DailyColors.burgundy, size: 20),
+          suffixIcon: suffixIcon,
           hintStyle: const TextStyle(fontSize: 12, color: DailyColors.gray),
         ),
       ),
@@ -363,23 +405,58 @@ class _AuthScreenState extends State<AuthScreen> {
       : 'delivery partner';
 
   Future<void> _login() async {
-    if (identifier.text.trim().isEmpty || password.text.isEmpty) {
-      _snack('Enter your login details.');
+    if (loading) return;
+
+    final rawId = identifier.text.trim();
+    final rawPassword = password.text;
+
+    if (rawId.isEmpty) {
+      _snack(usePhone
+          ? 'Please enter your phone number.'
+          : 'Please enter your email address.');
       return;
     }
+
+    if (usePhone) {
+      final digits = rawId.replaceAll(RegExp(r'\D'), '');
+      if (digits.length < 10) {
+        _snack('Please enter a valid 10-digit phone number.');
+        return;
+      }
+    } else {
+      final emailRegex =
+          RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+      if (!emailRegex.hasMatch(rawId)) {
+        _snack('Please enter a valid email address.');
+        return;
+      }
+    }
+
+    if (rawPassword.isEmpty) {
+      _snack('Please enter your password.');
+      return;
+    }
+
     if (widget.role != 'CUSTOMER') {
       _snack('${_roleName()} dashboard will be connected next.');
       return;
     }
+
     setState(() => loading = true);
     try {
-      final data = await CustomerApiService().login(
-        emailOrPhone: identifier.text.trim(),
-        password: password.text,
+      final api = widget.apiService ?? CustomerApiService();
+      final data = await api.login(
+        emailOrPhone: rawId,
+        password: rawPassword,
+        role: 'CUSTOMER',
       );
       final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
-      if (user['role'] != 'CUSTOMER' || user['customer_id'] == null) {
-        throw const CustomerApiException('This account is not a Customer account.', statusCode: 403);
+      final role = (user['role'] ?? '').toString().toUpperCase();
+      if (role != 'CUSTOMER' || user['customer_id'] == null) {
+        throw const CustomerApiException(
+          'This account is not authorized as a Customer account.',
+          statusCode: 403,
+        );
       }
       await SessionService.saveCustomer(user);
       if (!mounted) return;
@@ -389,33 +466,98 @@ class _AuthScreenState extends State<AuthScreen> {
       );
     } on CustomerApiException catch (error) {
       if (mounted) _snack(error.message);
+    } catch (_) {
+      if (mounted) {
+        _snack('Unable to connect to the DAILY server. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
   }
 
-  void _signup() {
-    if ([
-      fullName,
-      phone,
-      email,
-      address,
-      newPassword,
-      confirmPassword,
-    ].any((c) => c.text.trim().isEmpty)) {
-      _snack('Please complete all required information.');
+  Future<void> _signup() async {
+    if (fullName.text.trim().isEmpty) {
+      _snack('Please enter your full name.');
+      return;
+    }
+    if (phone.text.trim().isEmpty) {
+      _snack('Please enter your phone number.');
+      return;
+    }
+    if (phone.text.trim().length < 10) {
+      _snack('Phone number must be at least 10 digits.');
+      return;
+    }
+    if (email.text.trim().isEmpty) {
+      _snack('Please enter your email address.');
+      return;
+    }
+    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email.text.trim())) {
+      _snack('Please enter a valid email address.');
+      return;
+    }
+    if (address.text.trim().isEmpty) {
+      _snack('Please enter your delivery address.');
+      return;
+    }
+    if (newPassword.text.isEmpty) {
+      _snack('Please create a password.');
+      return;
+    }
+    if (newPassword.text.length < 6) {
+      _snack('Password must be at least 6 characters long.');
+      return;
+    }
+    if (confirmPassword.text.isEmpty) {
+      _snack('Please confirm your password.');
       return;
     }
     if (newPassword.text != confirmPassword.text) {
       _snack('Passwords do not match.');
       return;
     }
-    _snack('Customer signup is not available because server.js has no customer registration endpoint.');
+    if (!terms) {
+      _snack('Please accept the Terms & Conditions.');
+      return;
+    }
+
+    setState(() => loading = true);
+    try {
+      final api = widget.apiService ?? CustomerApiService();
+      final data = await api.register(
+        name: fullName.text.trim(),
+        email: email.text.trim(),
+        phone: phone.text.trim(),
+        address: address.text.trim(),
+        password: newPassword.text,
+      );
+      final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
+      if (user['customer_id'] == null) {
+        throw const CustomerApiException('Customer account could not be initialized.');
+      }
+      await SessionService.saveCustomer(user);
+      if (!mounted) return;
+      _snack('Account created successfully!');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const CustomerDashboardScreen()),
+      );
+    } on CustomerApiException catch (error) {
+      if (mounted) _snack(error.message);
+    } catch (_) {
+      if (mounted) _snack('Unable to connect to the DAILY server.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
-  void _snack(String message) => ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(content: Text(message), backgroundColor: DailyColors.burgundy),
-  );
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: DailyColors.burgundy),
+    );
+  }
 }
 
 

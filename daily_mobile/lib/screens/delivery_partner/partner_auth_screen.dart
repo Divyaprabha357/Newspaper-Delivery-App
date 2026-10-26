@@ -8,7 +8,12 @@ import 'partner_widgets.dart';
 
 class PartnerAuthScreen extends StatefulWidget {
   final VoidCallback onSignedIn;
-  const PartnerAuthScreen({super.key, required this.onSignedIn});
+  final RoleApiService? apiService;
+  const PartnerAuthScreen({
+    super.key,
+    required this.onSignedIn,
+    this.apiService,
+  });
 
   @override
   State<PartnerAuthScreen> createState() => _PartnerAuthScreenState();
@@ -18,7 +23,9 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
   bool login = true;
   int step = 0;
   bool terms = false;
-  final code = TextEditingController();
+  bool obscureLoginPassword = true;
+  final loginEmail = TextEditingController();
+  final loginPassword = TextEditingController();
   final password = TextEditingController();
   final confirmPassword = TextEditingController();
   final name = TextEditingController();
@@ -31,7 +38,17 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
 
   @override
   void dispose() {
-    for (final c in [code, password, confirmPassword, name, email, phone, emergency, registration]) {
+    for (final c in [
+      loginEmail,
+      loginPassword,
+      password,
+      confirmPassword,
+      name,
+      email,
+      phone,
+      emergency,
+      registration,
+    ]) {
       c.dispose();
     }
     super.dispose();
@@ -52,36 +69,78 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
           const SizedBox(height: 8),
           const Text('Access your routes, delivery history and earnings.', style: TextStyle(color: DailyColors.gray, height: 1.5)),
           const SizedBox(height: 30),
-          PartnerField(label: 'Partner Code', hint: 'e.g. DP001', controller: code, icon: Icons.badge_outlined),
+          PartnerField(
+            label: 'Email Address',
+            hint: 'Enter your email address',
+            controller: loginEmail,
+            icon: Icons.email_outlined,
+            keyboardType: TextInputType.emailAddress,
+          ),
           const SizedBox(height: 16),
-          PartnerField(label: 'Password', hint: 'Enter your password', controller: password, icon: Icons.lock_outline, obscure: true),
+          PartnerField(
+            label: 'Password',
+            hint: 'Enter your password',
+            controller: loginPassword,
+            icon: Icons.lock_outline,
+            obscure: obscureLoginPassword,
+            suffixIcon: IconButton(
+              icon: Icon(
+                obscureLoginPassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                color: DailyColors.gray,
+                size: 20,
+              ),
+              onPressed: () => setState(() => obscureLoginPassword = !obscureLoginPassword),
+            ),
+          ),
           const SizedBox(height: 12),
-          PrimaryButton(label: loading ? 'SIGNING IN...' : 'SIGN IN', onPressed: () async {
-            if (loading) return;
-            if (code.text.isEmpty || password.text.isEmpty) {
-              _message('Enter your partner code and password.');
-              return;
-            }
-            setState(() => loading = true);
-            try {
-              final response = await RoleApiService().login(
-                partnerCode: code.text.trim(),
-                password: password.text,
-              );
-              final user = Map<String, dynamic>.from(response['user'] as Map? ?? {});
-              if ((user['role'] ?? '').toString().toUpperCase() != 'DELIVERY_PARTNER') {
-                throw const RoleApiException('This account is not authorized for the Delivery Partner workspace.');
+          PrimaryButton(
+            label: loading ? 'SIGNING IN...' : 'SIGN IN',
+            onPressed: loading ? () {} : () async {
+              if (loading) return;
+
+              final emailStr = loginEmail.text.trim();
+              final passwordStr = loginPassword.text;
+
+              if (emailStr.isEmpty) {
+                _message('Please enter your email address.');
+                return;
               }
-              await RoleSessionService.savePartner(user);
-              if (mounted) widget.onSignedIn();
-            } on RoleApiException catch (error) {
-              if (mounted) _message(error.message);
-            } catch (_) {
-              if (mounted) _message('Unable to sign in to the Delivery Partner workspace.');
-            } finally {
-              if (mounted) setState(() => loading = false);
-            }
-          }),
+
+              final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+              if (!emailRegex.hasMatch(emailStr)) {
+                _message('Please enter a valid email address.');
+                return;
+              }
+
+              if (passwordStr.isEmpty) {
+                _message('Please enter your password.');
+                return;
+              }
+
+              setState(() => loading = true);
+              try {
+                final api = widget.apiService ?? RoleApiService();
+                final response = await api.login(
+                  emailOrPhone: emailStr,
+                  password: passwordStr,
+                  role: 'DELIVERY_PARTNER',
+                );
+                final user = Map<String, dynamic>.from(response['user'] as Map? ?? {});
+                final role = (user['role'] ?? '').toString().toUpperCase();
+                if (role != 'DELIVERY_PARTNER' || user['partner_id'] == null) {
+                  throw const RoleApiException('This account is not authorized for the Delivery Partner workspace.');
+                }
+                await RoleSessionService.savePartner(user);
+                if (mounted) widget.onSignedIn();
+              } on RoleApiException catch (error) {
+                if (mounted) _message(error.message);
+              } catch (_) {
+                if (mounted) _message('Unable to connect to the DAILY server. Please try again.');
+              } finally {
+                if (mounted) setState(() => loading = false);
+              }
+            },
+          ),
           const SizedBox(height: 24),
           Center(child: TextButton(onPressed: () => setState(() => login = false), child: const Text('New delivery partner? Register here', style: TextStyle(color: DailyColors.burgundy)))),
         ]),
@@ -128,25 +187,93 @@ class _PartnerAuthScreenState extends State<PartnerAuthScreen> {
           Row(children: [
             if (step > 0) Expanded(child: OutlinedButton(onPressed: () => setState(() => step--), child: const Text('BACK'))),
             if (step > 0) const SizedBox(width: 10),
-            Expanded(child: PrimaryButton(label: step == 3 ? 'CREATE ACCOUNT' : 'NEXT', onPressed: _next)),
+            Expanded(child: PrimaryButton(label: loading ? (step == 3 ? 'CREATING ACCOUNT...' : 'NEXT') : (step == 3 ? 'CREATE ACCOUNT' : 'NEXT'), onPressed: loading ? () {} : _next)),
           ]),
         ]),
       ),
     );
   }
 
-  void _next() {
-    if (step < 3) {
-      setState(() => step++);
+  Future<void> _next() async {
+    if (step == 0) {
+      if (name.text.trim().isEmpty) {
+        _message('Please enter your full name.');
+        return;
+      }
+      if (email.text.trim().isEmpty) {
+        _message('Please enter your email address.');
+        return;
+      }
+      if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(email.text.trim())) {
+        _message('Please enter a valid email address.');
+        return;
+      }
+      if (phone.text.trim().isEmpty) {
+        _message('Please enter your phone number.');
+        return;
+      }
+      setState(() => step = 1);
       return;
     }
-    if (password.text.length < 8 || password.text != confirmPassword.text || !terms) {
-      _message('Complete password requirements and accept the Terms & Conditions.');
+    if (step == 1) {
+      setState(() => step = 2);
       return;
     }
-    _message('Account created. Partner code will be assigned when the backend is connected.');
-    setState(() => login = true);
+    if (step == 2) {
+      setState(() => step = 3);
+      return;
+    }
+    // Step 3
+    if (password.text.isEmpty) {
+      _message('Please create a password.');
+      return;
+    }
+    if (password.text.length < 6) {
+      _message('Password must be at least 6 characters long.');
+      return;
+    }
+    if (confirmPassword.text.isEmpty) {
+      _message('Please confirm your password.');
+      return;
+    }
+    if (password.text != confirmPassword.text) {
+      _message('Passwords do not match.');
+      return;
+    }
+    if (!terms) {
+      _message('Please accept the Terms & Conditions.');
+      return;
+    }
+
+    setState(() => loading = true);
+    try {
+      final api = widget.apiService ?? RoleApiService();
+      final response = await api.registerPartner(
+        name: name.text.trim(),
+        email: email.text.trim(),
+        phone: phone.text.trim(),
+        password: password.text,
+        emergencyContact: emergency.text.trim().isEmpty ? null : emergency.text.trim(),
+        vehicleType: vehicle,
+        registrationNumber: registration.text.trim().isEmpty ? null : registration.text.trim(),
+      );
+      final user = Map<String, dynamic>.from(response['user'] as Map? ?? {});
+      await RoleSessionService.savePartner(user);
+      if (!mounted) return;
+      _message('Account created successfully!');
+      widget.onSignedIn();
+    } on RoleApiException catch (error) {
+      if (mounted) _message(error.message);
+    } catch (_) {
+      if (mounted) _message('Unable to register delivery partner account.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
-  void _message(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  void _message(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 }

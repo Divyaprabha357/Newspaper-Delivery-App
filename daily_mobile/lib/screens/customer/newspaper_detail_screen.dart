@@ -1,261 +1,383 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../services/customer_api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 
-class NewspaperDetailScreen extends StatelessWidget {
-  final String name;
-  final String price;
+class NewspaperDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> newspaper;
+  final int customerId;
+  final Map<String, dynamic>? customerProfile;
 
   const NewspaperDetailScreen({
     super.key,
-    required this.name,
-    required this.price,
+    required this.newspaper,
+    required this.customerId,
+    this.customerProfile,
   });
 
   @override
+  State<NewspaperDetailScreen> createState() => _NewspaperDetailScreenState();
+}
+
+class _NewspaperDetailScreenState extends State<NewspaperDetailScreen> {
+  final _api = CustomerApiService();
+  bool _submitting = false;
+  bool _loadingProfile = false;
+  Map<String, dynamic>? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _profile = widget.customerProfile;
+    if (_profile == null) {
+      _loadProfile();
+    }
+  }
+
+  Future<void> _loadProfile() async {
+    setState(() => _loadingProfile = true);
+    try {
+      final res = await _api.profile(widget.customerId);
+      if (res['user'] != null && mounted) {
+        setState(() {
+          _profile = Map<String, dynamic>.from(res['user'] as Map);
+          _loadingProfile = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingProfile = false);
+    }
+  }
+
+  String _formatPrice(dynamic perDelivery) {
+    if (perDelivery == null) return 'Price unavailable';
+    final priceNum = double.tryParse('$perDelivery');
+    if (priceNum == null) return '₹$perDelivery / delivery';
+    final monthly = priceNum * 30;
+    return '₹${monthly.toStringAsFixed(2)} / month (₹${priceNum.toStringAsFixed(2)} / delivery)';
+  }
+
+  Future<void> _confirmSubscription() async {
+    if (_submitting) return;
+
+    final newspaperId = int.tryParse('${widget.newspaper['newspaper_id']}');
+    final supplierId = int.tryParse('${widget.newspaper['supplier_id']}');
+    final paperName = '${widget.newspaper['newspaper_name'] ?? 'Newspaper'}';
+
+    if (newspaperId == null || supplierId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid newspaper or supplier information.')),
+      );
+      return;
+    }
+
+    setState(() => _submitting = true);
+
+    try {
+      await _api.createSubscription(
+        customerId: widget.customerId,
+        newspaperId: newspaperId,
+        supplierId: supplierId,
+        deliveryDays: 'MON,TUE,WED,THU,FRI,SAT,SUN',
+        scheduledDeliveryTime: '07:00:00',
+      );
+
+      if (!mounted) return;
+
+      // Show explicit confirmation dialog
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: DailyColors.white,
+          title: const Text('Subscription Confirmed'),
+          content: Text(
+            'You have successfully subscribed to $paperName.\n\n'
+            'Your daily morning delivery will begin tomorrow at your registered delivery address.',
+          ),
+          actions: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: DailyColors.burgundy,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('VIEW MY SUBSCRIPTIONS'),
+            ),
+          ],
+        ),
+      );
+
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } on CustomerApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message),
+          backgroundColor: DailyColors.burgundy,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final name = '${widget.newspaper['newspaper_name'] ?? 'Newspaper'}';
+    final language = '${widget.newspaper['language'] ?? 'English'}';
+    final category = '${widget.newspaper['publication_type'] ?? 'Daily Edition'}';
+    final supplierName = '${widget.newspaper['supplier_name'] ?? 'National Daily Editions'}';
+    final supplierContact = widget.newspaper['supplier_contact'] != null
+        ? '${widget.newspaper['supplier_contact']}'
+        : null;
+    final priceStr = _formatPrice(widget.newspaper['price_per_delivery']);
+
+    final addressParts = [
+      _profile?['address_line'],
+      _profile?['city'],
+      _profile?['pincode'] != null ? 'Pincode: ${_profile?['pincode']}' : null,
+    ].where((part) => part != null && '$part'.trim().isNotEmpty).join(', ');
+    final addressText = addressParts.isNotEmpty
+        ? addressParts
+        : (_loadingProfile ? 'Loading delivery address...' : 'Registered customer address');
+    final instructions = _profile?['delivery_instructions'];
+
     return Scaffold(
       backgroundColor: DailyColors.cream,
-
       body: SafeArea(
         child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 15, 22, 8),
               child: DailyHeader(
-                title: 'Newspaper Details',
-                onBack: () => Navigator.pop(context),
-                trailing: const Icon(Icons.more_horiz, size: 19),
+                title: 'Review Subscription',
+                onBack: _submitting ? null : () => Navigator.pop(context, false),
               ),
             ),
 
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(22, 0, 22, 30),
+                padding: const EdgeInsets.fromLTRB(22, 10, 22, 30),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Newspaper image
-                    AspectRatio(
-                      aspectRatio: 1.55,
-                      child: SvgPicture.asset(
-                        'assets/icons/newspaper.svg',
-                        fit: BoxFit.cover,
+                    // Publication Header Card
+                    Card(
+                      elevation: 0,
+                      color: DailyColors.white,
+                      shape: const RoundedRectangleBorder(
+                        side: BorderSide(color: DailyColors.divider),
                       ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Newspaper name + Popular badge
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            name,
-                            style: const TextStyle(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 5,
-                          ),
-                          color: const Color(0xFFF1D7D0),
-                          child: const Text(
-                            'POPULAR',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: DailyColors.burgundy,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // Publication details
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: DailyColors.white,
-                        border: Border.all(color: DailyColors.divider),
-                      ),
-                      child: Column(
-                        children: [
-                          _row(
-                            Icons.business,
-                            'Supplier',
-                            'National Daily Editions',
-                          ),
-                          _row(
-                            Icons.local_shipping_outlined,
-                            'Delivery',
-                            'Daily before 7:30 AM',
-                          ),
-                          _row(Icons.translate, 'Language', 'English'),
-                          _row(
-                            Icons.calendar_month_outlined,
-                            'Frequency',
-                            'Monday â€“ Sunday',
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // About
-                    const Text(
-                      'About the Publication',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 7),
-
-                    const Text(
-                      'The publication brings national, business, city and world '
-                      'news together in a concise daily edition. Content and '
-                      'delivery details are shown here so the customer can review '
-                      'the subscription before adding it.',
-                      style: TextStyle(
-                        fontSize: 14,
-                        height: 1.5,
-                        color: DailyColors.charcoal,
-                      ),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // What's included
-                    const Text(
-                      'Whatâ€™s Included',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(height: 7),
-
-                    ...[
-                      'Daily Morning Newspaper',
-                      'Sunday Special Edition',
-                      'Access to Weekly Review',
-                      'English Newspaper Edition',
-                    ].map(
-                      (x) => Padding(
-                        padding: const EdgeInsets.only(bottom: 5),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(
-                              Icons.check,
-                              size: 18,
-                              color: DailyColors.oliveDark,
+                            NewspaperThumb(title: name, width: 84),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: DailyColors.olive.withValues(alpha: 0.15),
+                                      border: Border.all(color: DailyColors.oliveDark),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: const Text(
+                                      'AVAILABLE NOW',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: DailyColors.oliveDark,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    name,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '$language • $category',
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      color: DailyColors.gray,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    priceStr,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: DailyColors.burgundy,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 6),
-                            Text(x, style: const TextStyle(fontSize: 14)),
                           ],
                         ),
                       ),
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 18),
 
-                    // Price + Subscribe
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'MONTHLY PRICE',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: DailyColors.gray,
-                                  letterSpacing: 1,
-                                ),
-                              ),
+                    // Section 1: Publication Information
+                    const SectionLabel('Publication Details'),
+                    const SizedBox(height: 8),
+                    _sectionBox([
+                      _itemRow(Icons.translate, 'Language', language),
+                      _itemRow(Icons.category_outlined, 'Category', category),
+                      _itemRow(Icons.repeat, 'Frequency', 'Monday – Sunday (Daily)'),
+                      _itemRow(
+                        Icons.description_outlined,
+                        'Description',
+                        'Delivers comprehensive morning coverage including regional and national news, business updates, and editorial commentary.',
+                      ),
+                    ]),
 
-                              const SizedBox(height: 3),
+                    const SizedBox(height: 18),
 
-                              Text(
-                                price,
-                                style: const TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                    // Section 2: Delivery & Supplier Review
+                    const SectionLabel('Delivery & Supplier Information'),
+                    const SizedBox(height: 8),
+                    _sectionBox([
+                      _itemRow(
+                        Icons.home_outlined,
+                        'Delivery Address',
+                        addressText,
+                        extra: instructions != null && '$instructions'.isNotEmpty
+                            ? 'Instructions: $instructions'
+                            : null,
+                      ),
+                      _itemRow(Icons.alarm, 'Delivery Time', '07:00 AM (Early Morning)'),
+                      _itemRow(
+                        Icons.business_outlined,
+                        'Supplier',
+                        supplierName,
+                        extra: supplierContact != null ? 'Contact: $supplierContact' : null,
+                      ),
+                      _itemRow(
+                        Icons.motorcycle_outlined,
+                        'Delivery Partner',
+                        'Assigned after confirmation',
+                        extra: 'A verified partner from your local morning route will deliver this edition.',
+                      ),
+                      _itemRow(Icons.receipt_long_outlined, 'Billing Frequency', 'Monthly (Charged per delivery)'),
+                    ]),
 
-                        Expanded(
-                          child: PrimaryButton(
-                            label: 'SUBSCRIBE NOW',
-                            onPressed: () async {
-                              final confirmed = await showDialog<bool>(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: Text('Subscribe to $name?'),
-                                  content: Text(
-                                    'Subscribe for $price and receive this newspaper at your registered delivery address.',
+                    const SizedBox(height: 24),
+
+                    // Pricing Summary Box
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: DailyColors.tan.withValues(alpha: 0.4),
+                        border: Border.all(color: DailyColors.divider),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline, size: 20, color: DailyColors.burgundy),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'SUBSCRIPTION SUMMARY',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: DailyColors.burgundy,
+                                    letterSpacing: 0.8,
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: const Text('CANCEL'),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: DailyColors.burgundy,
-                                        foregroundColor: Colors.white,
-                                      ),
-                                      child: const Text('CONFIRM SUBSCRIPTION'),
-                                    ),
-                                  ],
                                 ),
-                              );
-                              if (confirmed != true || !context.mounted) return;
-                              showDialog<void>(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text('Subscription Confirmed'),
-                                  content: Text(
-                                    '$name has been added to your active subscriptions.',
+                                const SizedBox(height: 2),
+                                Text(
+                                  '$name • $priceStr',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
                                   ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text(
-                                        'OK',
-                                        style: TextStyle(
-                                          color: DailyColors.burgundy,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                 ),
-                              );
-                            },
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+
+                    const SizedBox(height: 24),
+
+                    // Action Buttons: Confirm and Cancel
+                    if (_submitting)
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(color: DailyColors.burgundy),
+                        ),
+                      )
+                    else ...[
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: _confirmSubscription,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: DailyColors.burgundy,
+                            foregroundColor: Colors.white,
+                            shape: const RoundedRectangleBorder(),
+                          ),
+                          icon: const Icon(Icons.check_circle_outline, size: 20),
+                          label: const Text(
+                            'CONFIRM SUBSCRIPTION',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: DailyColors.charcoal,
+                            side: const BorderSide(color: DailyColors.divider),
+                            shape: const RoundedRectangleBorder(),
+                          ),
+                          child: const Text(
+                            'GO BACK / CANCEL',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -266,27 +388,61 @@ class NewspaperDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _row(IconData icon, String label, String value) {
+  Widget _sectionBox(List<Widget> children) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: DailyColors.white,
+        border: Border.all(color: DailyColors.divider),
+      ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _itemRow(IconData icon, String label, String value, {String? extra}) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 17, color: DailyColors.burgundy),
-
-          const SizedBox(width: 8),
-
+          Icon(icon, size: 18, color: DailyColors.burgundy),
+          const SizedBox(width: 10),
           SizedBox(
-            width: 72,
+            width: 110,
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: DailyColors.gray),
+              style: const TextStyle(
+                fontSize: 12,
+                color: DailyColors.gray,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
-
+          const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: DailyColors.charcoal,
+                  ),
+                ),
+                if (extra != null && extra.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    extra,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: DailyColors.gray,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -294,5 +450,3 @@ class NewspaperDetailScreen extends StatelessWidget {
     );
   }
 }
-
-

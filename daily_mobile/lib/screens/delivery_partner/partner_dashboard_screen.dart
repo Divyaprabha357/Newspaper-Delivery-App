@@ -1,20 +1,88 @@
 import 'package:flutter/material.dart';
 
+import '../../services/role_api_service.dart';
+import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
+import 'delivery_partner_app_screen.dart';
 import 'partner_models.dart';
 import 'partner_widgets.dart';
 
-class PartnerDashboardScreen extends StatelessWidget {
+class PartnerDashboardScreen extends StatefulWidget {
   final VoidCallback onStartRoute;
   final VoidCallback onReportIssue;
-  const PartnerDashboardScreen({super.key, required this.onStartRoute, required this.onReportIssue});
+  final RoleApiService? apiService;
+  const PartnerDashboardScreen({
+    super.key,
+    required this.onStartRoute,
+    required this.onReportIssue,
+    this.apiService,
+  });
+
+  @override
+  State<PartnerDashboardScreen> createState() => _PartnerDashboardScreenState();
+}
+
+class _PartnerDashboardScreenState extends State<PartnerDashboardScreen> {
+  bool loading = true;
+  Object? error;
+  Map<String, dynamic>? profile;
+  List<Map<String, dynamic>> routes = const [];
+
+  @override
+  void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    setState(() { loading = true; error = null; });
+    try {
+      final session = await RoleSessionService.getPartner();
+      final userId = int.tryParse('${session?['user_id']}');
+      final partnerId = int.tryParse('${session?['partner_id']}');
+      if (userId == null && partnerId == null) {
+        await RoleSessionService.clearPartner();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const DeliveryPartnerAppScreen()),
+          (route) => false,
+        );
+        return;
+      }
+      final api = widget.apiService ??
+          RoleApiService(authToken: session?['session_token']?.toString());
+      final responses = await Future.wait([
+        api.partnerProfile(userId ?? partnerId!, partnerId: partnerId),
+        api.partnerRoutes(userId ?? partnerId!, partnerId: partnerId),
+      ]);
+      final routeRows = (responses[1]['routes'] as List? ?? const [])
+          .map((row) => Map<String, dynamic>.from(row as Map)).toList();
+      if (mounted) setState(() { profile = responses[0]['profile'] as Map<String, dynamic>?; routes = routeRows; loading = false; });
+    } on RoleApiException catch (e) {
+      if (e.isUnauthorized) {
+        await RoleSessionService.clearPartner();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const DeliveryPartnerAppScreen()),
+          (route) => false,
+        );
+        return;
+      }
+      if (mounted) setState(() { error = e; loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { error = e; loading = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (loading) return const Center(child: CircularProgressIndicator());
+    if (error != null) return partnerError(error!, _load);
+    final name = '${profile?['name'] ?? 'Delivery partner'}';
+    final route = routes.isEmpty ? null : routes.first;
+    final assigned = routes.where((r) => r['customer_id'] != null).length;
+    final delivered = routes.where((r) => '${r['assignment_status']}'.toUpperCase() == 'DELIVERED').length;
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const PartnerTop('Good morning, Rahul.', subtitle: 'Wednesday, 7 October 2026'),
+        PartnerTop('Good morning, $name.', subtitle: route?['route_date']?.toString() ?? 'Today'),
         const Padding(padding: EdgeInsets.symmetric(horizontal: 24), child: Rule()),
         Padding(
           padding: const EdgeInsets.fromLTRB(24, 22, 24, 12),
@@ -24,23 +92,23 @@ class PartnerDashboardScreen extends StatelessWidget {
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text("TODAY'S ROUTE", style: TextStyle(color: DailyColors.tan, fontSize: 14, letterSpacing: 1.4, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
-              const Text('Dadar West Morning Route', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('${route?['route_name'] ?? 'No route assigned'}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              const Text('06:00 AM — 11:00 AM  â€¢  12 CUSTOMERS  â€¢  24 NEWSPAPERS', style: TextStyle(color: DailyColors.tan, fontSize: 14)),
+              Text('${route?['shift_start'] ?? '—'} — ${route?['shift_end'] ?? '—'}  •  $assigned CUSTOMERS', style: const TextStyle(color: DailyColors.tan, fontSize: 14)),
               const SizedBox(height: 18),
-              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: onStartRoute, style: ElevatedButton.styleFrom(backgroundColor: DailyColors.tan, foregroundColor: DailyColors.charcoal, shape: const RoundedRectangleBorder()), child: const Text('START ROUTE'))),
+              SizedBox(width: double.infinity, child: ElevatedButton(onPressed: widget.onStartRoute, style: ElevatedButton.styleFrom(backgroundColor: DailyColors.tan, foregroundColor: DailyColors.charcoal, shape: const RoundedRectangleBorder()), child: const Text('START ROUTE'))),
             ]),
           ),
         ),
         const PartnerSection("TODAY'S PROGRESS"),
-        const PartnerProgress(),
+        PartnerProgress(delivered: delivered, total: assigned),
         const PartnerSection('QUICK ACTIONS'),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Row(children: [
-            Expanded(child: _action('Todayâ€™s Route', Icons.route_outlined, onStartRoute)),
+            Expanded(child: _action("Today's Route", Icons.route_outlined, widget.onStartRoute)),
             const SizedBox(width: 10),
-            Expanded(child: _action('Report Issue', Icons.report_problem_outlined, onReportIssue)),
+            Expanded(child: _action('Report Issue', Icons.report_problem_outlined, widget.onReportIssue)),
           ]),
         ),
         const SizedBox(height: 22),
@@ -71,12 +139,13 @@ class PartnerRouteScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final delivered = customers.where((customer) => customer.deliveryStatus == 'DELIVERED').length;
     return SingleChildScrollView(
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const PartnerTop("Today's route", subtitle: 'Dadar West Morning Route'),
+        const PartnerTop("Today's route", subtitle: 'Assigned route'),
         const PartnerSection("TODAY'S PROGRESS"),
-        const PartnerProgress(),
-        const Padding(padding: EdgeInsets.fromLTRB(24, 14, 24, 8), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('8 / 12 Customers', style: TextStyle(fontWeight: FontWeight.bold)), Text('67% Complete', style: TextStyle(color: DailyColors.gray))])),
+        PartnerProgress(delivered: delivered, total: customers.length),
+        Padding(padding: const EdgeInsets.fromLTRB(24, 14, 24, 8), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('$delivered / ${customers.length} Customers', style: const TextStyle(fontWeight: FontWeight.bold)), Text('${customers.isEmpty ? 0 : (delivered * 100 ~/ customers.length)}% Complete', style: const TextStyle(color: DailyColors.gray))])),
         const PartnerSection('ROUTE CUSTOMERS'),
         ...customers.asMap().entries.map((entry) => _customer(entry.key, entry.value)),
         const SizedBox(height: 20),
@@ -109,4 +178,3 @@ class PartnerRouteScreen extends StatelessWidget {
     );
   }
 }
-

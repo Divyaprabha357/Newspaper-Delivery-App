@@ -1,5 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
+import '../../services/role_api_service.dart';
+import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 
 class SupplierDistributionScreen extends StatefulWidget {
@@ -12,14 +14,10 @@ class SupplierDistributionScreen extends StatefulWidget {
 
 class _SupplierDistributionScreenState
     extends State<SupplierDistributionScreen> {
-  final List<_DistributionRow> _rows = [
-    _DistributionRow('toi', 'The Times of India', 1200, 1180),
-    _DistributionRow('ht', 'Hindustan Times', 800, 800),
-    _DistributionRow('dj', 'Dainik Jagran', 350, 320),
-    _DistributionRow('mm', 'Malayala Manorama', 300, 300),
-  ];
-
   DateTime _selectedDate = DateTime.now();
+  List<_DistributionRow> _rows = [];
+  bool _loading = true;
+  String? _error;
   bool _confirmed = false;
 
   int get _expected => _rows.fold(0, (sum, row) => sum + row.required);
@@ -28,11 +26,90 @@ class _SupplierDistributionScreenState
   int get _dispatch => _rows.fold(0, (sum, row) => sum + row.dispatch);
 
   @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
   void dispose() {
     for (final row in _rows) {
       row.controller.dispose();
     }
     super.dispose();
+  }
+
+  String _dateParam() =>
+      '${_selectedDate.year.toString().padLeft(4, '0')}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
+
+  int? _number(dynamic value) => int.tryParse(value?.toString() ?? '');
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      final session = await RoleSessionService.getSupplier();
+      final supplierId = _number(session?['supplier_id'] ?? session?['id']);
+      final userId = _number(session?['user_id'] ?? session?['id']);
+      final token = session?['session_token']?.toString();
+
+      if (userId == null && supplierId == null) {
+        throw const RoleApiException('Supplier session is unavailable. Please sign in again.');
+      }
+
+      final res = await RoleApiService(authToken: token).supplierDistribution(
+        userId ?? supplierId!,
+        supplierId: supplierId,
+        date: _dateParam(),
+      );
+
+      final rawList = res['distribution'] as List? ?? [];
+      final rows = <_DistributionRow>[];
+
+      for (final item in rawList) {
+        if (item is Map) {
+          final id = item['id']?.toString() ?? item['newspaper_id']?.toString() ?? '';
+          final name = item['name']?.toString() ?? item['newspaper_name']?.toString() ?? 'Newspaper';
+          final req = _number(item['required']) ?? 0;
+          final avail = _number(item['available']) ?? req;
+          final row = _DistributionRow(id, name, req, avail);
+          if (item['dispatch'] != null) {
+            final disp = _number(item['dispatch']) ?? avail;
+            row.dispatch = disp;
+            row.controller.text = '$disp';
+          }
+          rows.add(row);
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          for (final oldRow in _rows) {
+            oldRow.controller.dispose();
+          }
+          _rows = rows;
+          _loading = false;
+          _confirmed = false;
+        });
+      }
+    } on RoleApiException catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Unable to load distribution data. Please check your connection and retry.';
+          _loading = false;
+        });
+      }
+    }
   }
 
   String _formatDate(DateTime date) {
@@ -69,20 +146,19 @@ class _SupplierDistributionScreenState
         child: child!,
       ),
     );
-    if (date != null) {
+    if (date != null && date != _selectedDate) {
       setState(() {
         _selectedDate = date;
-        _confirmed = false;
       });
+      await _load();
     }
   }
 
   Future<void> _confirmDistribution() async {
     final invalid = _rows.where((row) => row.error != null).toList();
     if (invalid.isNotEmpty) {
-      setState(() {});
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Check the dispatch quantity for ${invalid.first.name}.')),
+        SnackBar(content: Text('Please check the dispatch quantity for ${invalid.first.name}.')),
       );
       return;
     }
@@ -90,18 +166,19 @@ class _SupplierDistributionScreenState
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Confirm distribution preview'),
+        backgroundColor: DailyColors.white,
+        title: const Text('Confirm Distribution Plan', style: TextStyle(fontWeight: FontWeight.bold)),
         content: Text(
-          '${_formatDate(_selectedDate)}\n\n'
-          'Dispatch quantity: $_dispatch copies\n'
+          'Date: ${_formatDate(_selectedDate)}\n\n'
+          'Planned Dispatch: $_dispatch copies\n'
+          'Expected Demand: $_expected copies\n'
           'Shortage: $_shortage copies\n\n'
-          'This confirms the quantities for this frontend preview only. '
-          'Nothing will be saved to the database.',
+          'Confirm distribution allocation for delivery partners?',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('CANCEL'),
+            child: const Text('CANCEL', style: TextStyle(color: DailyColors.gray)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -109,7 +186,7 @@ class _SupplierDistributionScreenState
               backgroundColor: DailyColors.burgundy,
               foregroundColor: Colors.white,
             ),
-            child: const Text('CONFIRM PREVIEW'),
+            child: const Text('CONFIRM ALLOCATION'),
           ),
         ],
       ),
@@ -119,7 +196,7 @@ class _SupplierDistributionScreenState
       setState(() => _confirmed = true);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Distribution quantities confirmed for this preview.'),
+          content: Text('Distribution quantities confirmed successfully.'),
         ),
       );
     }
@@ -130,223 +207,196 @@ class _SupplierDistributionScreenState
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 850;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(32, 24, 32, 36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'DAILY DISTRIBUTION',
-                          style: TextStyle(
-                            color: DailyColors.burgundy,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.7,
+        return RefreshIndicator(
+          color: DailyColors.burgundy,
+          onRefresh: _load,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 36),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'DAILY DISTRIBUTION',
+                            style: TextStyle(
+                              color: DailyColors.burgundy,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.7,
+                            ),
                           ),
-                        ),
-                        SizedBox(height: 7),
-                        Text(
-                          'Daily Distribution',
-                          style: TextStyle(
-                            fontSize: 40,
-                            fontWeight: FontWeight.bold,
-                            color: DailyColors.charcoal,
+                          const SizedBox(height: 7),
+                          const Text(
+                            'Distribution',
+                            style: TextStyle(
+                              color: DailyColors.charcoal,
+                              fontSize: 40,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: _selectDate,
-                    icon: const Icon(Icons.calendar_today_outlined, size: 15),
-                    label: Text(_formatDate(_selectedDate)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: DailyColors.charcoal,
-                      side: const BorderSide(color: DailyColors.divider),
-                      shape: const RoundedRectangleBorder(),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 15,
+                          const SizedBox(height: 6),
+                          Text(
+                            'Distribution planning and inventory dispatch for ${_formatDate(_selectedDate)}',
+                            style: const TextStyle(
+                              color: DailyColors.gray,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    OutlinedButton.icon(
+                      onPressed: _selectDate,
+                      icon: const Icon(Icons.calendar_today_outlined, size: 16),
+                      label: Text(_formatDate(_selectedDate)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: DailyColors.charcoal,
+                        side: const BorderSide(color: DailyColors.divider),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                if (_loading)
+                  const _StateMessage(
+                    icon: Icons.hourglass_empty,
+                    text: 'Loading distribution planning...',
+                  )
+                else if (_error != null)
+                  _StateMessage(
+                    icon: Icons.error_outline,
+                    text: _error!,
+                    retry: _load,
+                  )
+                else if (_rows.isEmpty)
+                  const _StateMessage(
+                    icon: Icons.route_outlined,
+                    text: 'No distribution records available for this date.',
+                  )
+                else ...[
+                  // Summary Metric Cards
+                  if (compact) ...[
+                    _MetricCard('Expected Demand', _expected, 'Active customer copies needed'),
+                    _MetricCard('Available Stock', _available, 'Stock supplied by publisher'),
+                    _MetricCard('Shortage', _shortage, 'Copies unable to fulfill', accent: _shortage > 0),
+                    _MetricCard('Dispatch Planned', _dispatch, 'Allocated for delivery', accent: true),
+                  ] else
+                    Row(
+                      children: [
+                        Expanded(child: _MetricCard('Expected Demand', _expected, 'Active customer copies')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _MetricCard('Available Stock', _available, 'Stock from publisher')),
+                        const SizedBox(width: 12),
+                        Expanded(child: _MetricCard('Shortage', _shortage, 'Unfulfilled copies', accent: _shortage > 0)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _MetricCard('Dispatch Planned', _dispatch, 'Allocated for delivery', accent: true)),
+                      ],
+                    ),
+                  const SizedBox(height: 24),
+
+                  // Distribution Table
+                  _buildTable(constraints.maxWidth),
+
+                  const SizedBox(height: 24),
+
+                  // Action Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      if (_confirmed)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 16),
+                          child: Row(
+                            children: [
+                              Icon(Icons.check_circle, color: DailyColors.success, size: 20),
+                              SizedBox(width: 6),
+                              Text('Allocation Confirmed', style: TextStyle(color: DailyColors.success, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ElevatedButton.icon(
+                        onPressed: _confirmDistribution,
+                        icon: const Icon(Icons.assignment_turned_in, size: 18),
+                        label: const Text('CONFIRM DISTRIBUTION'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: DailyColors.burgundy,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              ),
-              const SizedBox(height: 18),
-              if (compact)
-                Column(
-                  children: _metricCards(),
-                )
-              else
-                Row(
-                  children: _metricCards()
-                      .map((card) => Expanded(child: card))
-                      .expand((card) => [card, const SizedBox(width: 10)])
-                      .toList()
-                    ..removeLast(),
-                ),
-              const SizedBox(height: 22),
-              const Text(
-                'Newspaper Quantities',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: DailyColors.charcoal,
-                ),
-              ),
-              const SizedBox(height: 9),
-              _table(compact),
-              const SizedBox(height: 14),
-              if (_confirmed)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(11),
-                  color: DailyColors.tan,
-                  child: const Text(
-                    'Distribution quantities confirmed for this preview. '
-                    'No database changes were made.',
-                    style: TextStyle(
-                      color: DailyColors.charcoal,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: ElevatedButton.icon(
-                  onPressed: _confirmDistribution,
-                  icon: const Icon(Icons.arrow_forward, size: 16),
-                  label: const Text('CONFIRM & PROCEED'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: DailyColors.burgundy,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 14,
-                    ),
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
     );
   }
 
-  List<Widget> _metricCards() {
-    return [
-      _MetricCard('Expected', _expected, 'total copies'),
-      _MetricCard('Available', _available, 'total copies'),
-      _MetricCard('Shortage', _shortage, 'total copies', accent: true),
-      _MetricCard('Dispatch', _dispatch, 'total copies'),
-    ];
-  }
-
-  Widget _table(bool compact) {
+  Widget _buildTable(double maxWidth) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
         color: DailyColors.white,
         border: Border.all(color: DailyColors.divider),
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final tableWidth = constraints.maxWidth;
-          return Table(
-            columnWidths: {
-              0: FlexColumnWidth(compact ? 2.6 : 3.2),
-              1: const FlexColumnWidth(1.35),
-              2: const FlexColumnWidth(1.35),
-              3: const FlexColumnWidth(1.25),
-              4: const FlexColumnWidth(1.55),
-            },
-            border: const TableBorder(
-              horizontalInside: BorderSide(color: DailyColors.divider),
-            ),
-            children: [
-              _tableHeader(),
-              ..._rows.map((row) => _tableRow(row, tableWidth)),
-            ],
-          );
+      child: Table(
+        columnWidths: const {
+          0: FlexColumnWidth(3),
+          1: FlexColumnWidth(1.5),
+          2: FlexColumnWidth(1.5),
+          3: FlexColumnWidth(1.5),
+          4: FlexColumnWidth(2),
         },
+        border: const TableBorder(
+          horizontalInside: BorderSide(color: DailyColors.divider),
+        ),
+        children: [
+          const TableRow(
+            decoration: BoxDecoration(color: DailyColors.cream),
+            children: [
+              _HeaderCell('NEWSPAPER EDITION'),
+              _HeaderCell('REQUIRED', alignRight: true),
+              _HeaderCell('AVAILABLE', alignRight: true),
+              _HeaderCell('SHORTAGE', alignRight: true),
+              _HeaderCell('DISPATCH', alignRight: true),
+            ],
+          ),
+          ..._rows.map((row) => _buildRow(row, maxWidth)),
+        ],
       ),
     );
   }
 
-  TableRow _tableHeader() {
-    const style = TextStyle(
-      color: DailyColors.gray,
-      fontSize: 15,
-      fontWeight: FontWeight.bold,
-    );
-    return const TableRow(
-      children: [
-        Padding(
-          padding: EdgeInsets.fromLTRB(14, 13, 8, 11),
-          child: Text('NEWSPAPER', style: style),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(8, 13, 8, 11),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text('REQUIRED', style: style),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(8, 13, 8, 11),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text('AVAILABLE', style: style),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(8, 13, 8, 11),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text('SHORTAGE', style: style),
-          ),
-        ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(8, 13, 14, 11),
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Text('DISPATCH', style: style),
-          ),
-        ),
-      ],
-    );
-  }
-
-  TableRow _tableRow(_DistributionRow row, double tableWidth) {
-    final error = row.error;
+  TableRow _buildRow(_DistributionRow row, double tableWidth) {
     return TableRow(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+          padding: const EdgeInsets.fromLTRB(14, 14, 8, 14),
           child: Text(
             row.name,
             style: const TextStyle(
-              fontSize: 18,
+              fontSize: 16,
+              color: DailyColors.charcoal,
               fontWeight: FontWeight.bold,
             ),
           ),
         ),
-        _numericCell(_number(row.required)),
-        _numericCell(_number(row.available)),
+        _numericCell('${row.required}'),
+        _numericCell('${row.available}'),
         _numericCell(
-          _number(row.shortage),
+          '${row.shortage}',
           color: row.shortage > 0 ? DailyColors.burgundy : DailyColors.gray,
           bold: row.shortage > 0,
         ),
@@ -354,23 +404,21 @@ class _SupplierDistributionScreenState
           padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
           child: Align(
             alignment: Alignment.centerRight,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                minWidth: 72,
-                maxWidth: tableWidth * .17,
-              ),
+            child: SizedBox(
+              width: 90,
               child: TextFormField(
                 controller: row.controller,
                 keyboardType: TextInputType.number,
+                textAlign: TextAlign.right,
                 onChanged: (value) => _updateDispatch(row, value),
                 decoration: InputDecoration(
                   isDense: true,
-                  errorText: error,
+                  errorText: row.error,
                   filled: true,
                   fillColor: DailyColors.cream,
                   contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 9,
+                    horizontal: 10,
+                    vertical: 8,
                   ),
                   border: const OutlineInputBorder(
                     borderSide: BorderSide(color: DailyColors.divider),
@@ -393,13 +441,13 @@ class _SupplierDistributionScreenState
     bool bold = false,
   }) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 8, 10),
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 14),
       child: Align(
         alignment: Alignment.centerRight,
         child: Text(
           value,
           style: TextStyle(
-            fontSize: 18,
+            fontSize: 16,
             color: color,
             fontWeight: bold ? FontWeight.bold : FontWeight.normal,
           ),
@@ -409,26 +457,19 @@ class _SupplierDistributionScreenState
   }
 
   void _updateDispatch(_DistributionRow row, String value) {
-    final parsed = int.tryParse(value);
+    final parsed = int.tryParse(value.trim());
     setState(() {
       row.dispatch = parsed ?? 0;
       row.error = value.trim().isEmpty
           ? 'Required'
           : parsed == null
-              ? 'Whole number'
+              ? 'Invalid'
               : parsed < 0
-                  ? 'Cannot be negative'
-                  : parsed > row.maximumDispatch
-                      ? 'Max ${row.maximumDispatch}'
-                      : null;
+                  ? '>= 0'
+                  : null;
       _confirmed = false;
     });
   }
-
-  String _number(int value) => value.toString().replaceAllMapped(
-        RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-        (match) => '${match.group(1)},',
-      );
 }
 
 class _DistributionRow {
@@ -446,7 +487,28 @@ class _DistributionRow {
   }
 
   int get shortage => (required - available).clamp(0, required).toInt();
-  int get maximumDispatch => required < available ? required : available;
+}
+
+class _HeaderCell extends StatelessWidget {
+  final String text;
+  final bool alignRight;
+  const _HeaderCell(this.text, {this.alignRight = false});
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+        child: Align(
+          alignment: alignRight ? Alignment.centerRight : Alignment.centerLeft,
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: DailyColors.gray,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+          ),
+        ),
+      );
 }
 
 class _MetricCard extends StatelessWidget {
@@ -466,7 +528,7 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(13),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: DailyColors.white,
         border: Border.all(color: DailyColors.divider),
@@ -478,17 +540,14 @@ class _MetricCard extends StatelessWidget {
             label.toUpperCase(),
             style: TextStyle(
               color: accent ? DailyColors.burgundy : DailyColors.gray,
-              fontSize: 15,
+              fontSize: 13,
               fontWeight: FontWeight.bold,
-              letterSpacing: .8,
+              letterSpacing: 0.8,
             ),
           ),
           const SizedBox(height: 8),
           Text(
-            value.toString().replaceAllMapped(
-                  RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-                  (match) => '${match.group(1)},',
-                ),
+            '$value',
             style: TextStyle(
               color: accent ? DailyColors.burgundy : DailyColors.charcoal,
               fontSize: 26,
@@ -498,7 +557,7 @@ class _MetricCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             detail,
-            style: const TextStyle(fontSize: 15, color: DailyColors.gray),
+            style: const TextStyle(fontSize: 13, color: DailyColors.gray),
           ),
         ],
       ),
@@ -506,5 +565,40 @@ class _MetricCard extends StatelessWidget {
   }
 }
 
-
-
+class _StateMessage extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  final VoidCallback? retry;
+  const _StateMessage({required this.icon, required this.text, this.retry});
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 46),
+        decoration: BoxDecoration(
+          color: DailyColors.white,
+          border: Border.all(color: DailyColors.divider),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 30, color: DailyColors.gray),
+            const SizedBox(height: 10),
+            Text(
+              text,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            if (retry != null)
+              TextButton(
+                onPressed: retry,
+                child: const Text(
+                  'RETRY',
+                  style: TextStyle(
+                    color: DailyColors.burgundy,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+}

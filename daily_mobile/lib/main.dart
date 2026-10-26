@@ -1,20 +1,18 @@
 import 'package:flutter/material.dart';
 
+import 'screens/splash_screen.dart';
 import 'theme/app_theme.dart';
-import 'screens/customer/customer_dashboard_screen.dart';
-import 'screens/welcome_screen.dart';
-import 'services/session_service.dart';
 
-Future<void> main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  final isLoggedIn = await SessionService.isCustomerLoggedIn();
-  runApp(DailyApp(isLoggedIn: isLoggedIn));
+  runApp(const DailyApp());
 }
 
 class DailyApp extends StatelessWidget {
-  final bool isLoggedIn;
+  final bool? isLoggedIn;
+  final Widget? home;
 
-  const DailyApp({super.key, required this.isLoggedIn});
+  const DailyApp({super.key, this.isLoggedIn, this.home});
 
   @override
   Widget build(BuildContext context) {
@@ -22,9 +20,7 @@ class DailyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'DAILY',
       theme: AppTheme.lightTheme,
-      home: isLoggedIn
-          ? const CustomerDashboardScreen()
-          : const WelcomeScreen(),
+      home: home ?? const SplashScreen(),
     );
   }
 }

@@ -2,6 +2,9 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import 'api_config.dart';
+import 'session_service.dart';
+
 class CustomerApiException implements Exception {
   final String message;
   final int? statusCode;
@@ -9,20 +12,20 @@ class CustomerApiException implements Exception {
   const CustomerApiException(this.message, {this.statusCode});
 
   bool get isUnauthorized => statusCode == 401 || statusCode == 403;
+  bool get isNetworkError => statusCode == null || statusCode == 0;
 
   @override
   String toString() => message;
 }
 
 class CustomerApiService {
+  static http.Client? customClient;
+
   CustomerApiService({
     http.Client? client,
     String? baseUrl,
-  })  : _client = client ?? http.Client(),
-        _baseUrl = (baseUrl ?? const String.fromEnvironment(
-          'DAILY_API_BASE_URL',
-          defaultValue: 'http://localhost:5000/api',
-        )).replaceFirst(RegExp(r'/$'), '');
+  })  : _client = client ?? customClient ?? http.Client(),
+        _baseUrl = (baseUrl ?? ApiConfig.baseUrl).replaceFirst(RegExp(r'/$'), '');
 
   final http.Client _client;
   final String _baseUrl;
@@ -30,11 +33,38 @@ class CustomerApiService {
   Future<Map<String, dynamic>> login({
     required String emailOrPhone,
     required String password,
+    String? role,
   }) {
     return _request(
       '/login',
       method: 'POST',
-      body: {'emailOrPhone': emailOrPhone, 'password': password},
+      body: {
+        'emailOrPhone': emailOrPhone,
+        'password': password,
+        if (role != null && role.isNotEmpty) 'role': role,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> register({
+    required String name,
+    required String email,
+    required String phone,
+    required String address,
+    required String password,
+    String? preferredDeliveryTime,
+  }) {
+    return _request(
+      '/register',
+      method: 'POST',
+      body: {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'address': address,
+        'password': password,
+        'preferred_delivery_time': ?preferredDeliveryTime,
+      },
     );
   }
 
@@ -67,6 +97,28 @@ class CustomerApiService {
         body: {'customer_id': customerId, 'status': status},
       );
 
+  Future<Map<String, dynamic>> subscriptionDetail(
+    int customerId,
+    int subscriptionId,
+  ) =>
+      _request('/subscriptions/$subscriptionId?customer_id=$customerId');
+
+  Future<Map<String, dynamic>> changeSubscriptionNewspaper({
+    required int customerId,
+    required int subscriptionId,
+    required int newNewspaperId,
+    required int newSupplierId,
+  }) =>
+      _request(
+        '/subscriptions/$subscriptionId/change-newspaper',
+        method: 'PATCH',
+        body: {
+          'customer_id': customerId,
+          'new_newspaper_id': newNewspaperId,
+          'new_supplier_id': newSupplierId,
+        },
+      );
+
   Future<Map<String, dynamic>> newspapers() => _request('/newspapers');
 
   Future<Map<String, dynamic>> createSubscription({
@@ -93,6 +145,24 @@ class CustomerApiService {
 
   Future<Map<String, dynamic>> payments(int customerId) =>
       _request('/payments?customer_id=$customerId');
+
+  Future<Map<String, dynamic>> payBill({
+    required int customerId,
+    int? billId,
+    double? amount,
+    String paymentMethod = 'UPI',
+  }) =>
+      _request(
+        '/payments',
+        method: 'POST',
+        body: {
+          'customer_id': customerId,
+          'bill_id': ?billId,
+          'amount': ?amount,
+          'payment_method': paymentMethod,
+        },
+      );
+
 
   Future<Map<String, dynamic>> requests(int customerId) =>
       _request('/requests?customer_id=$customerId');
@@ -150,12 +220,33 @@ class CustomerApiService {
       try {
         data = Map<String, dynamic>.from(jsonDecode(response.body) as Map);
       } on FormatException {
-        throw const CustomerApiException('The DAILY server returned an invalid response.');
+        if (response.statusCode == 502 || response.statusCode == 504) {
+          throw CustomerApiException(
+            'The DAILY server gateway is temporarily unavailable (HTTP ${response.statusCode}). Please try again in a moment.',
+            statusCode: response.statusCode,
+          );
+        }
+        if (response.statusCode == 404) {
+          throw const CustomerApiException(
+            'The requested endpoint was not found on the server (HTTP 404).',
+            statusCode: 404,
+          );
+        }
+        throw CustomerApiException(
+          'The DAILY server returned an unexpected response (HTTP ${response.statusCode}).',
+          statusCode: response.statusCode,
+        );
       }
     }
     if (response.statusCode < 200 || response.statusCode >= 300 || data['success'] == false) {
+      final msg = (data['message'] as String?) ??
+          (data['error'] as String?) ??
+          'The DAILY server could not complete the request (HTTP ${response.statusCode}).';
+      if (response.statusCode == 401 && path != '/login' && path != '/register' && path != '/customer/register') {
+        await SessionService.logOut();
+      }
       throw CustomerApiException(
-        (data['message'] as String?) ?? 'The DAILY server could not complete the request.',
+        msg,
         statusCode: response.statusCode,
       );
     }

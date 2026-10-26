@@ -5,6 +5,7 @@ import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'supplier_app_shell.dart';
+import '../role_selection_screen.dart';
 
 class SupplierLoginScreen extends StatefulWidget {
   const SupplierLoginScreen({super.key});
@@ -85,7 +86,16 @@ class _SupplierLoginScreenState extends State<SupplierLoginScreen> {
               padding: const EdgeInsets.fromLTRB(22, 15, 22, 0),
               child: DailyHeader(
                 title: 'DAILY',
-                onBack: () => Navigator.pop(context),
+                onBack: () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                    );
+                  }
+                },
               ),
             ),
             Expanded(

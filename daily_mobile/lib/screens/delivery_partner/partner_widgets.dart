@@ -2,6 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
+import '../role_selection_screen.dart';
+
+Widget partnerError(Object error, VoidCallback retry) => Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.cloud_off_outlined, color: DailyColors.burgundy, size: 38),
+        const SizedBox(height: 12),
+        Text(error.toString(), textAlign: TextAlign.center),
+        const SizedBox(height: 14),
+        OutlinedButton(onPressed: retry, child: const Text('RETRY')),
+      ]),
+    );
+
+Widget partnerEmpty(String message) => Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(child: Text(message, textAlign: TextAlign.center, style: const TextStyle(color: DailyColors.gray))),
+    );
 
 class PartnerPage extends StatelessWidget {
   final String title;
@@ -19,7 +36,19 @@ class PartnerPage extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 15, 22, 0),
-              child: DailyHeader(title: title, onBack: onBack ?? () => Navigator.pop(context)),
+              child: DailyHeader(
+                title: title,
+                onBack: onBack ?? () {
+                  if (Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  } else {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RoleSelectionScreen()),
+                    );
+                  }
+                },
+              ),
             ),
             Expanded(child: child),
           ],
@@ -35,6 +64,8 @@ class PartnerField extends StatelessWidget {
   final TextEditingController controller;
   final IconData icon;
   final bool obscure;
+  final Widget? suffixIcon;
+  final TextInputType? keyboardType;
 
   const PartnerField({
     super.key,
@@ -43,6 +74,8 @@ class PartnerField extends StatelessWidget {
     required this.controller,
     required this.icon,
     this.obscure = false,
+    this.suffixIcon,
+    this.keyboardType,
   });
 
   @override
@@ -55,7 +88,12 @@ class PartnerField extends StatelessWidget {
         TextField(
           controller: controller,
           obscureText: obscure,
-          decoration: InputDecoration(hintText: hint, prefixIcon: Icon(icon, size: 19, color: DailyColors.burgundy)),
+          keyboardType: keyboardType,
+          decoration: InputDecoration(
+            hintText: hint,
+            prefixIcon: Icon(icon, size: 19, color: DailyColors.burgundy),
+            suffixIcon: suffixIcon,
+          ),
         ),
       ],
     );
@@ -106,7 +144,9 @@ class PartnerTop extends StatelessWidget {
 }
 
 class PartnerProgress extends StatelessWidget {
-  const PartnerProgress({super.key});
+  final int delivered;
+  final int total;
+  const PartnerProgress({super.key, required this.delivered, required this.total});
 
   @override
   Widget build(BuildContext context) {
@@ -117,14 +157,13 @@ class PartnerProgress extends StatelessWidget {
         decoration: BoxDecoration(color: DailyColors.white, border: Border.all(color: DailyColors.divider)),
         child: Column(
           children: [
-            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: const [Text('7 Delivered', style: TextStyle(fontWeight: FontWeight.bold)), Text('5 Remaining', style: TextStyle(color: DailyColors.gray))]),
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('$delivered Delivered', style: const TextStyle(fontWeight: FontWeight.bold)), Text('${total - delivered} Remaining', style: const TextStyle(color: DailyColors.gray))]),
             const SizedBox(height: 12),
-            ClipRRect(borderRadius: BorderRadius.circular(2), child: const LinearProgressIndicator(value: .58, minHeight: 9, backgroundColor: DailyColors.tan, valueColor: AlwaysStoppedAnimation(DailyColors.burgundy))),
+            ClipRRect(borderRadius: BorderRadius.circular(2), child: LinearProgressIndicator(value: total == 0 ? 0 : delivered / total, minHeight: 9, backgroundColor: DailyColors.tan, valueColor: const AlwaysStoppedAnimation(DailyColors.burgundy))),
           ],
         ),
       ),
     );
   }
 }
-
 

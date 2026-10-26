@@ -4,7 +4,6 @@ import '../theme/app_theme.dart';
 import '../widgets/daily_widgets.dart';
 import 'customer/auth_screen.dart';
 import 'delivery_partner/delivery_partner_app_screen.dart';
-import 'supplier/supplier_login_screen.dart';
 
 class RoleSelectionScreen extends StatelessWidget {
   const RoleSelectionScreen({super.key});
@@ -14,13 +13,6 @@ class RoleSelectionScreen extends StatelessWidget {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => const DeliveryPartnerAppScreen()),
-      );
-      return;
-    }
-    if (role == 'SUPPLIER') {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const SupplierLoginScreen()),
       );
       return;
     }
@@ -81,41 +73,39 @@ class RoleSelectionScreen extends StatelessWidget {
                     _role(
                       context,
                       Icons.person_outline,
-                      'Customer',
+                      'CUSTOMER',
+                      'Subscribe to newspapers and manage deliveries',
                       'CUSTOMER',
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     _role(
                       context,
                       Icons.delivery_dining_outlined,
-                      'Delivery Partner',
+                      'DELIVERY PARTNER',
+                      'View assigned deliveries and manage delivery tasks',
                       'DELIVERY_PARTNER',
-                    ),
-                    const SizedBox(height: 12),
-                    _role(
-                      context,
-                      Icons.storefront_outlined,
-                      'Supplier',
-                      'SUPPLIER',
                     ),
                     const SizedBox(height: 28),
                     Center(
-                      child: RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            color: DailyColors.gray,
-                            fontSize: 13,
-                          ),
-                          children: [
-                            const TextSpan(text: 'Already have an account? '),
-                            TextSpan(
-                              text: 'Sign In',
-                              style: const TextStyle(
-                                color: DailyColors.burgundy,
-                                fontWeight: FontWeight.bold,
-                              ),
+                      child: GestureDetector(
+                        onTap: () => _open(context, 'CUSTOMER'),
+                        child: RichText(
+                          text: const TextSpan(
+                            style: TextStyle(
+                              color: DailyColors.gray,
+                              fontSize: 13,
                             ),
-                          ],
+                            children: [
+                              TextSpan(text: 'Already have an account? '),
+                              TextSpan(
+                                text: 'Sign In',
+                                style: TextStyle(
+                                  color: DailyColors.burgundy,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -146,12 +136,17 @@ class RoleSelectionScreen extends StatelessWidget {
     );
   }
 
-  Widget _role(BuildContext context, IconData icon, String title, String role) {
+  Widget _role(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String subtitle,
+    String role,
+  ) {
     return InkWell(
       onTap: () => _open(context, role),
       child: Container(
-        height: 76,
-        padding: const EdgeInsets.symmetric(horizontal: 18),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: BoxDecoration(
           color: DailyColors.white,
           border: Border.all(color: const Color(0xFFEDE4DA)),
@@ -166,26 +161,44 @@ class RoleSelectionScreen extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 43,
-              height: 43,
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: const Color(0xFFF8F0EC),
                 shape: BoxShape.circle,
                 border: Border.all(color: const Color(0xFFEAD7D0)),
               ),
-              child: Icon(icon, color: DailyColors.burgundy),
+              child: Icon(icon, color: DailyColors.burgundy, size: 22),
             ),
             const SizedBox(width: 16),
             Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                      color: DailyColors.charcoal,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: DailyColors.gray,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: DailyColors.gray),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right, color: DailyColors.gray, size: 22),
           ],
         ),
       ),

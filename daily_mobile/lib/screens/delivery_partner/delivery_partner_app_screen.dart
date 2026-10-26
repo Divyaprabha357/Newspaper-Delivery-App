@@ -12,7 +12,8 @@ import 'partner_models.dart';
 import 'partner_profile_screen.dart';
 
 class DeliveryPartnerAppScreen extends StatefulWidget {
-  const DeliveryPartnerAppScreen({super.key});
+  final RoleApiService? apiService;
+  const DeliveryPartnerAppScreen({super.key, this.apiService});
 
   @override
   State<DeliveryPartnerAppScreen> createState() => _DeliveryPartnerAppScreenState();
@@ -37,8 +38,30 @@ class _DeliveryPartnerAppScreenState extends State<DeliveryPartnerAppScreen> {
   Future<void> _restoreSession() async {
     final session = await RoleSessionService.getPartner();
     if (session != null) {
-      authenticated = true;
-      await _loadDeliveries(session, showLoading: false);
+      final userId = int.tryParse('${session['user_id']}');
+      final partnerId = int.tryParse('${session['partner_id']}');
+      if (userId == null && partnerId == null) {
+        await RoleSessionService.clearPartner();
+        if (mounted) setState(() { authenticated = false; loading = false; });
+        return;
+      }
+      try {
+        final api = widget.apiService ??
+            RoleApiService(authToken: session['session_token']?.toString());
+        await api.partnerProfile(userId ?? partnerId!, partnerId: partnerId);
+        authenticated = true;
+        await _loadDeliveries(session, showLoading: false);
+      } on RoleApiException catch (e) {
+        if (e.isUnauthorized || e.statusCode == 404) {
+          await RoleSessionService.clearPartner();
+          authenticated = false;
+        } else {
+          authenticated = true;
+          await _loadDeliveries(session, showLoading: false);
+        }
+      } catch (_) {
+        authenticated = true;
+      }
     }
     if (mounted) setState(() => loading = false);
   }
@@ -48,41 +71,71 @@ class _DeliveryPartnerAppScreenState extends State<DeliveryPartnerAppScreen> {
     bool showLoading = true,
   }) async {
     final userId = int.tryParse('${session['user_id']}');
-    if (userId == null) return;
+    final partnerId = int.tryParse('${session['partner_id']}');
+    if (userId == null && partnerId == null) return;
     if (showLoading && mounted) setState(() => loading = true);
     try {
-      final response = await RoleApiService(
-        authToken: session['session_token']?.toString(),
-      ).partnerDeliveries(userId);
+      final api = widget.apiService ??
+          RoleApiService(
+            authToken: session['session_token']?.toString(),
+          );
+      final response = await api.partnerDeliveries(userId ?? partnerId!, partnerId: partnerId);
       final rows = (response['deliveries'] as List? ?? const [])
           .map((row) => Map<String, dynamic>.from(row as Map))
           .toList();
-      final grouped = <int, List<Map<String, dynamic>>>{};
+      final grouped = <String, List<Map<String, dynamic>>>{};
       for (final row in rows) {
-        final id = int.tryParse('${row['delivery_id']}');
-        if (id != null) grouped.putIfAbsent(id, () => []).add(row);
+        final key = row['delivery_id'] != null
+            ? 'd_${row['delivery_id']}'
+            : 'a_${row['assignment_id']}_${row['delivery_date']}';
+        grouped.putIfAbsent(key, () => []).add(row);
       }
       final loaded = grouped.entries.map((entry) {
         final first = entry.value.first;
+        final deliveryId = int.tryParse('${first['delivery_id']}');
+        final assignmentId = int.tryParse('${first['assignment_id']}');
+        final seq = first['sequence_number']?.toString();
+        final numStr = (seq != null && seq.isNotEmpty)
+            ? seq
+            : (deliveryId != null ? '$deliveryId' : (assignmentId != null ? '$assignmentId' : '—'));
+
+        final newspapers = entry.value
+            .map((row) => '${row['newspaper_name'] ?? ''}'.trim())
+            .where((name) => name.isNotEmpty && name != '—')
+            .toSet()
+            .toList();
+
         return RouteCustomer(
-          number: '${entry.key}',
+          number: numStr,
           name: '${first['customer_name'] ?? 'Customer'}',
           address: '${first['address_line'] ?? '—'}',
           area: '${first['city'] ?? ''} ${first['pincode'] ?? ''}'.trim(),
           time: '${first['scheduled_time'] ?? '—'}',
-          newspapers: entry.value.map((row) => '${row['newspaper_name'] ?? '—'}').toList(),
+          newspapers: newspapers.isEmpty ? const ['—'] : newspapers,
           instructions: '${first['delivery_instructions'] ?? '—'}',
-          deliveryId: entry.key,
+          deliveryId: deliveryId,
+          assignmentId: assignmentId,
           customerId: int.tryParse('${first['customer_id']}'),
           itemIds: entry.value
               .map((row) => int.tryParse('${row['delivery_item_id']}'))
               .whereType<int>()
               .toList(),
+          deliveryStatus: first['delivery_status']?.toString(),
         );
       }).toList();
       if (mounted) setState(() => customers = loaded);
-    } on RoleApiException {
-      if (mounted && showLoading) setState(() => customers = const []);
+    } on RoleApiException catch (e) {
+      if (e.isUnauthorized) {
+        await RoleSessionService.clearPartner();
+        if (mounted) {
+          setState(() {
+            authenticated = false;
+            customers = const [];
+          });
+        }
+      } else {
+        if (mounted && showLoading) setState(() => customers = const []);
+      }
     } finally {
       if (mounted && showLoading) setState(() => loading = false);
     }
@@ -101,15 +154,26 @@ class _DeliveryPartnerAppScreenState extends State<DeliveryPartnerAppScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (!authenticated) {
-      return PartnerAuthScreen(onSignedIn: () async {
-        final session = await RoleSessionService.getPartner();
-        if (!mounted) return;
-        setState(() => authenticated = true);
-        if (session != null) await _loadDeliveries(session);
-      });
+      return PartnerAuthScreen(
+        apiService: widget.apiService,
+        onSignedIn: () async {
+          final session = await RoleSessionService.getPartner();
+          if (!mounted) return;
+          setState(() => authenticated = true);
+          if (session != null) await _loadDeliveries(session);
+        },
+      );
     }
     if (selectedCustomer != null) {
-      return PartnerCustomerScreen(customer: selectedCustomer!, onBack: () => setState(() => selectedCustomer = null));
+      return PartnerCustomerScreen(
+        customer: selectedCustomer!,
+        onBack: () => setState(() => selectedCustomer = null),
+        onStatusUpdated: () async {
+          final session = await RoleSessionService.getPartner();
+          if (session != null) await _loadDeliveries(session, showLoading: false);
+          if (mounted) setState(() => selectedCustomer = null);
+        },
+      );
     }
     if (profileSubScreen != null) {
       return PartnerProfileSubScreen(screen: profileSubScreen!, onBack: () => setState(() => profileSubScreen = null));
@@ -153,12 +217,21 @@ class _DeliveryPartnerAppScreenState extends State<DeliveryPartnerAppScreen> {
       case _PartnerTab.profile:
         return PartnerProfileScreen(
           onOpen: (screen) => setState(() => profileSubScreen = screen),
-          onLogout: () => setState(() {
-            authenticated = false;
-            customers = const [];
-            RoleSessionService.clearPartner();
-            tab = _PartnerTab.dashboard;
-          }),
+          onLogout: () async {
+            await RoleSessionService.clearPartner();
+            if (!mounted) return;
+            setState(() {
+              authenticated = false;
+              selectedCustomer = null;
+              profileSubScreen = null;
+              customers = const [];
+            });
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const DeliveryPartnerAppScreen()),
+              (route) => false,
+            );
+          },
         );
     }
   }

@@ -6,6 +6,7 @@ import '../../theme/mobile_role_design.dart';
 import '../../widgets/daily_widgets.dart';
 import '../../services/customer_api_service.dart';
 import '../../services/session_service.dart';
+import 'auth_screen.dart';
 
 import 'delivery_history_screen.dart';
 import 'subscription_catalog_screen.dart';
@@ -15,7 +16,8 @@ import 'service_request_screen.dart';
 import 'notifications_screen.dart';
 
 class CustomerDashboardScreen extends StatefulWidget {
-  const CustomerDashboardScreen({super.key});
+  final CustomerApiService? apiService;
+  const CustomerDashboardScreen({super.key, this.apiService});
 
   @override
   State<CustomerDashboardScreen> createState() =>
@@ -29,6 +31,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
   Map<String, dynamic>? customer;
   List<dynamic> subscriptions = [];
   List<dynamic> deliveries = [];
+  List<dynamic> payments = [];
 
   @override
   void initState() {
@@ -39,21 +42,52 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
   Future<void> _loadCustomerData() async {
     final customerId = await SessionService.getCustomerId();
     if (customerId == null) {
-      if (mounted) setState(() { loading = false; loadError = 'Your session has expired. Please sign in again.'; });
+      await SessionService.logOut();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthScreen(role: 'CUSTOMER')),
+        (route) => false,
+      );
       return;
     }
     try {
-      final api = CustomerApiService();
-      final results = await Future.wait([api.profile(customerId), api.subscriptions(customerId), api.deliveryHistory(customerId)]);
+      final api = widget.apiService ?? CustomerApiService();
+      final results = await Future.wait([
+        api.profile(customerId),
+        api.subscriptions(customerId),
+        api.deliveryHistory(customerId),
+        api.payments(customerId),
+      ]);
       if (!mounted) return;
       setState(() {
         customer = Map<String, dynamic>.from(results[0]['user'] as Map? ?? {});
-        subscriptions = List<dynamic>.from(results[1]['subscriptions'] as List? ?? []);
-        deliveries = List<dynamic>.from(results[2]['deliveries'] as List? ?? []);
+        subscriptions =
+            List<dynamic>.from(results[1]['subscriptions'] as List? ?? []);
+        deliveries =
+            List<dynamic>.from(results[2]['deliveries'] as List? ?? []);
+        payments =
+            List<dynamic>.from(results[3]['payments'] as List? ?? []);
         loading = false;
       });
     } on CustomerApiException catch (error) {
+      if (error.isUnauthorized) {
+        await SessionService.logOut();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthScreen(role: 'CUSTOMER')),
+          (route) => false,
+        );
+        return;
+      }
       if (mounted) setState(() { loading = false; loadError = error.message; });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          loading = false;
+          loadError =
+              'Unable to connect to the DAILY server. Please check your connection and try again.';
+        });
+      }
     }
   }
 
@@ -69,24 +103,10 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
     return Theme(
       data: MobileRoleDesign.theme(context),
       child: Scaffold(
-      backgroundColor: DailyColors.cream,
-      extendBody: true,
-      body: SafeArea(child: pages[index]),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ServiceRequestScreen()),
-        ),
-        backgroundColor: DailyColors.burgundy,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.support_agent_outlined, size: 20),
-        label: const Text(
-          'ASK HELP',
-          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      bottomNavigationBar: DailyBottomNav(
+        backgroundColor: DailyColors.cream,
+        extendBody: true,
+        body: SafeArea(child: pages[index]),
+        bottomNavigationBar: DailyBottomNav(
         selectedIndex: index,
         onTap: (i) {
           setState(() {
@@ -117,6 +137,16 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
     final latestStatus = latestDelivery?['item_status'] ?? latestDelivery?['delivery_status'] ?? 'Awaiting delivery';
     final latestTime = latestDelivery?['actual_time'] ?? latestDelivery?['scheduled_time'] ?? '—';
     final partnerName = latestDelivery?['partner_name'] ?? 'Not assigned';
+    final pendingBills = payments.where((p) {
+      final status = (p['bill_status'] ?? p['payment_status'] ?? '').toString().toUpperCase();
+      return status == 'PENDING' || status == 'DUE';
+    }).toList();
+    final pendingCount = pendingBills.length;
+    final pendingSum = pendingBills.fold<double>(
+      0.0,
+      (acc, p) => acc + (double.tryParse('${p['total_amount'] ?? p['amount'] ?? 0}') ?? 0.0),
+    );
+    final pendingLabel = pendingCount > 0 ? '₹${pendingSum.toStringAsFixed(0)}' : '₹0';
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(22, 15, 22, 120),
       child: Column(
@@ -206,7 +236,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                           const SizedBox(width: 6),
 
                           Text(
-                            '${latestStatus.toString().replaceAll('_', ' ')} â€¢ $latestTime',
+                            '${latestStatus.toString().replaceAll('_', ' ')} • $latestTime',
                             style: TextStyle(fontSize: 14),
                           ),
 
@@ -233,7 +263,11 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                         width: double.infinity,
                         height: 36,
                         child: ElevatedButton(
-                          onPressed: () {},
+                          onPressed: () {
+                            setState(() {
+                              index = 1;
+                            });
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: DailyColors.burgundy,
                             foregroundColor: Colors.white,
@@ -268,7 +302,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
               const SizedBox(width: 10),
 
               Expanded(
-                child: _metric('PENDING\nPAYMENT', '—', 'VIEW PAYMENTS', () {
+                child: _metric('PENDING\nPAYMENT', pendingLabel, 'VIEW PAYMENTS', () {
                   setState(() {
                     index = 2;
                   });
@@ -286,7 +320,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           else
             ...subscriptions.take(3).map((item) => _subscriptionSummary(
               item['newspaper_name'] as String? ?? 'Newspaper',
-              '${item['status'] ?? '—'} â€¢ ${item['scheduled_delivery_time'] ?? '—'}',
+              '${item['status'] ?? '—'} • ${item['scheduled_delivery_time'] ?? '—'}',
             )),
 
           const SizedBox(height: 18),
@@ -298,21 +332,21 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           _service('Report Missed Delivery', Icons.report_problem_outlined, () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ServiceRequestScreen()),
+              MaterialPageRoute(builder: (_) => const ServiceRequestScreen(initialRequestType: 'Missed Delivery')),
             );
           }),
 
           _service('Pause Subscription', Icons.pause_circle_outline, () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ServiceRequestScreen()),
+              MaterialPageRoute(builder: (_) => const ServiceRequestScreen(initialRequestType: 'Other Request')),
             );
           }),
 
           _service('Manage Address', Icons.location_on_outlined, () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ServiceRequestScreen()),
+              MaterialPageRoute(builder: (_) => const ServiceRequestScreen(initialRequestType: 'Change Address')),
             );
           }),
         ],

@@ -1,6 +1,11 @@
-
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, ".env") });
 const mysql = require("mysql2");
+const fs = require("fs");
+
+const caCert = fs.existsSync(path.join(__dirname, "ca.pem"))
+    ? fs.readFileSync(path.join(__dirname, "ca.pem"))
+    : process.env.DB_SSL_CA;
 
 const db = mysql.createConnection({
     host: process.env.DB_HOST,
@@ -9,7 +14,7 @@ const db = mysql.createConnection({
     database: process.env.DB_NAME,
     port: Number(process.env.DB_PORT),
     ssl: {
-        ca: process.env.DB_SSL_CA,
+        ca: caCert,
         rejectUnauthorized: true
     }
 });

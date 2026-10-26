@@ -1,8 +1,10 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
+import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'supplier_customers_screen.dart';
+import 'supplier_communication_screen.dart';
 import 'supplier_dashboard_screen.dart';
 import 'supplier_delivery_operations_screen.dart';
 import 'supplier_distribution_screen.dart';
@@ -12,6 +14,7 @@ import 'supplier_payments_screen.dart';
 import 'supplier_profile_screen.dart';
 import 'supplier_reports_screen.dart';
 import 'supplier_requests_screen.dart';
+import 'supplier_login_screen.dart';
 
 class SupplierAppShell extends StatefulWidget {
   const SupplierAppShell({super.key});
@@ -22,6 +25,25 @@ class SupplierAppShell extends StatefulWidget {
 
 class _SupplierAppShellState extends State<SupplierAppShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkSupplierSession();
+  }
+
+  Future<void> _checkSupplierSession() async {
+    final supplier = await RoleSessionService.getSupplier();
+    final supplierId = supplier?['supplier_id'] ?? supplier?['id'] ?? supplier?['user_id'];
+    if (supplier == null || supplierId == null) {
+      await RoleSessionService.clearSupplier();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const SupplierLoginScreen()),
+        (route) => false,
+      );
+    }
+  }
 
   final List<_NavItem> _items = const [
     _NavItem('Home', Icons.home_outlined),
@@ -95,6 +117,30 @@ class _SupplierAppShellState extends State<SupplierAppShell> {
                   },
                 );
               }),
+              const Divider(color: DailyColors.divider),
+              ListTile(
+                leading: const Icon(
+                  Icons.logout,
+                  color: DailyColors.burgundy,
+                ),
+                title: const Text(
+                  'Log Out',
+                  style: TextStyle(
+                    color: DailyColors.burgundy,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                onTap: () async {
+                  await RoleSessionService.clearSupplier();
+                  if (!context.mounted) return;
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SupplierLoginScreen()),
+                    (route) => false,
+                  );
+                },
+              ),
             ],
           ),
         ),
@@ -114,7 +160,14 @@ class _SupplierAppShellState extends State<SupplierAppShell> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SupplierCommunicationScreen(),
+                        ),
+                      );
+                    },
                     icon: const Icon(Icons.notifications_none, size: 26),
                   ),
                   const SizedBox(width: 4),

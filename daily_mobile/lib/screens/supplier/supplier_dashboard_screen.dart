@@ -1,23 +1,486 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
+import '../../services/role_api_service.dart';
+import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
-import '../../widgets/daily_widgets.dart';
+import 'supplier_login_screen.dart';
 import 'supplier_distribution_screen.dart';
 
-class SupplierDashboardScreen extends StatelessWidget {
+class SupplierDashboardScreen extends StatefulWidget {
   const SupplierDashboardScreen({super.key});
+  @override
+  State<SupplierDashboardScreen> createState() =>
+      _SupplierDashboardScreenState();
+}
+
+class _SupplierDashboardScreenState extends State<SupplierDashboardScreen> {
+  bool _loading = true;
+  String? _error;
+  String _supplierName = 'Supplier';
+  Map<String, dynamic>? _profile;
+  List<Map<String, dynamic>> _subscriptions = [];
+  List<Map<String, dynamic>> _deliveries = [];
+  List<Map<String, dynamic>> _newspapers = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  int? _number(dynamic value) => int.tryParse(value?.toString() ?? '');
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final session = await RoleSessionService.getSupplier();
+      final supplierId = _number(
+        session?['supplier_id'] ?? session?['id'] ?? session?['user_id'],
+      );
+      if (supplierId == null) {
+        await RoleSessionService.clearSupplier();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SupplierLoginScreen()),
+          (route) => false,
+        );
+        return;
+      }
+      final api = RoleApiService(
+        authToken: session?['session_token']?.toString(),
+      );
+      final results = await Future.wait([
+        api.supplierProfile(supplierId).catchError((_) => <String, dynamic>{}),
+        api.supplierSubscriptions(supplierId).catchError((_) => <String, dynamic>{}),
+        api.supplierDeliveries(supplierId).catchError((_) => <String, dynamic>{}),
+        api.supplierNewspapers(supplierId).catchError((_) => <String, dynamic>{}),
+      ]);
+
+      final profile = results[0]['profile'] is Map
+          ? Map<String, dynamic>.from(results[0]['profile'] as Map)
+          : null;
+      final subscriptions = results[1]['subscriptions'];
+      final deliveries = results[2]['deliveries'];
+      final newspapers = results[3]['newspapers'];
+
+      if (mounted) {
+        setState(() {
+          _profile = profile;
+          _supplierName = profile?['supplier_name']?.toString() ??
+              session?['supplier_name']?.toString() ??
+              'Supplier';
+          _subscriptions = (subscriptions is List)
+              ? subscriptions
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : [];
+          _deliveries = (deliveries is List)
+              ? deliveries
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : [];
+          _newspapers = (newspapers is List)
+              ? newspapers
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : [];
+        });
+      }
+    } on RoleApiException catch (e) {
+      if (e.isUnauthorized) {
+        await RoleSessionService.clearSupplier();
+        if (!mounted) return;
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const SupplierLoginScreen()),
+          (route) => false,
+        );
+        return;
+      }
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = 'Unable to load dashboard data right now.');
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  int get _activeSubscriptions => _subscriptions
+      .where((r) => r['status']?.toString().toUpperCase() == 'ACTIVE')
+      .length;
+  int get _delivered => _deliveries
+      .where(
+        (r) => ['DELIVERED', 'COMPLETED'].contains(
+          (r['delivery_status'] ?? r['item_status']).toString().toUpperCase(),
+        ),
+      )
+      .length;
+  int get _pending => _deliveries.length - _delivered;
+  int get _customers => _subscriptions
+      .map((r) => r['customer_id'])
+      .where((v) => v != null)
+      .toSet()
+      .length;
+  int get _newspapersCount => _newspapers.length;
+
+  @override
+  Widget build(BuildContext context) => SingleChildScrollView(
+    padding: const EdgeInsets.fromLTRB(32, 24, 32, 36),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'DASHBOARD',
+          style: TextStyle(
+            color: DailyColors.burgundy,
+            fontSize: 15,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.8,
+          ),
+        ),
+        const SizedBox(height: 7),
+        Text(
+          _supplierName,
+          style: const TextStyle(
+            color: DailyColors.charcoal,
+            fontSize: 34,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        if (_profile?['address'] != null &&
+            _profile!['address'].toString().trim().isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Text(
+            _profile!['address'].toString(),
+            style: const TextStyle(color: DailyColors.gray, fontSize: 15),
+          ),
+        ],
+        const SizedBox(height: 9),
+        Text(
+          _today(),
+          style: const TextStyle(color: DailyColors.gray, fontSize: 16),
+        ),
+        const SizedBox(height: 17),
+        if (_loading)
+          const _StateMessage(
+            icon: Icons.hourglass_empty,
+            text: 'Loading supplier data...',
+          )
+        else if (_error != null)
+          _StateMessage(icon: Icons.error_outline, text: _error!, retry: _load)
+        else if (_subscriptions.isEmpty &&
+            _deliveries.isEmpty &&
+            _newspapers.isEmpty)
+          _StateMessage(
+            icon: Icons.inbox_outlined,
+            text: 'No supplier records available yet.',
+            retry: _load,
+          )
+        else
+          _content(context),
+      ],
+    ),
+  );
+
+  Widget _content(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: _card('Active subscriptions', '$_activeSubscriptions'),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: _card('Customers served', '$_customers')),
+        ],
+      ),
+      const SizedBox(height: 10),
+      Row(
+        children: [
+          Expanded(
+            child: _card('Newspapers offered', '$_newspapersCount'),
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: _card('Total deliveries', '${_deliveries.length}')),
+        ],
+      ),
+      const SizedBox(height: 17),
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: DailyColors.charcoal,
+          border: Border.all(color: DailyColors.charcoal),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Delivery status',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _deliveries.isEmpty
+                  ? 'No delivery records recorded'
+                  : '$_delivered delivered · $_pending remaining',
+              style: const TextStyle(color: Color(0xFFC8BBA8), fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: _deliveries.isEmpty ? 0 : _delivered / _deliveries.length,
+              color: const Color(0xFFE5C9A8),
+              backgroundColor: const Color(0xFF5D5A56),
+            ),
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SupplierDistributionScreen(),
+                  ),
+                ),
+                child: const Text(
+                  'VIEW DISTRIBUTION →',
+                  style: TextStyle(
+                    color: Color(0xFFE5C9A8),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 22),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'SUPPLIED NEWSPAPERS',
+            style: TextStyle(
+              color: DailyColors.burgundy,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+          Text(
+            '$_newspapersCount total',
+            style: const TextStyle(color: DailyColors.gray, fontSize: 14),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      if (_newspapers.isEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: DailyColors.white,
+            border: Border.all(color: DailyColors.divider),
+          ),
+          child: const Text(
+            'No newspapers available for this supplier.',
+            style: TextStyle(color: DailyColors.gray, fontSize: 15),
+          ),
+        )
+      else
+        ..._newspapers.take(4).map((n) {
+          final price = n['price_per_delivery'] != null
+              ? '₹${n['price_per_delivery']}'
+              : '—';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: DailyColors.white,
+              border: Border.all(color: DailyColors.divider),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.newspaper,
+                  color: DailyColors.burgundy,
+                  size: 20,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        n['newspaper_name']?.toString() ?? 'Newspaper',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: DailyColors.charcoal,
+                        ),
+                      ),
+                      Text(
+                        n['language']?.toString() ?? '',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: DailyColors.gray,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  price,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: DailyColors.burgundy,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      const SizedBox(height: 20),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'CUSTOMER ORDERS & SUBSCRIPTIONS',
+            style: TextStyle(
+              color: DailyColors.burgundy,
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+          Text(
+            '${_subscriptions.length} records',
+            style: const TextStyle(color: DailyColors.gray, fontSize: 14),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      if (_subscriptions.isEmpty)
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: DailyColors.white,
+            border: Border.all(color: DailyColors.divider),
+          ),
+          child: const Text(
+            'No customer subscriptions found.',
+            style: TextStyle(color: DailyColors.gray, fontSize: 15),
+          ),
+        )
+      else
+        ..._subscriptions.take(3).map((sub) {
+          final customerName = sub['customer_name']?.toString() ?? 'Customer';
+          final newspaperName = sub['newspaper_name']?.toString() ?? 'Newspaper';
+          final status = sub['status']?.toString().toUpperCase() ?? 'UNKNOWN';
+          final price = sub['agreed_price'] != null ? '₹${sub['agreed_price']}' : '—';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: DailyColors.white,
+              border: Border.all(color: DailyColors.divider),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        customerName,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: DailyColors.charcoal,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        newspaperName,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: DailyColors.gray,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      status,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: status == 'ACTIVE'
+                            ? Colors.green.shade800
+                            : DailyColors.gray,
+                      ),
+                    ),
+                    Text(
+                      price,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: DailyColors.charcoal,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+    ],
+  );
+
+  Widget _card(String title, String value) => Container(
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: DailyColors.white,
+      border: Border.all(color: DailyColors.divider),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: const TextStyle(fontSize: 16, color: DailyColors.gray),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 28,
+            fontWeight: FontWeight.bold,
+            color: DailyColors.charcoal,
+          ),
+        ),
+      ],
+    ),
+  );
 
   String _today() {
-    final date = DateTime.now();
-    const weekdays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday',
-    ];
+    final d = DateTime.now();
     const months = [
       'January',
       'February',
@@ -32,557 +495,44 @@ class SupplierDashboardScreen extends StatelessWidget {
       'November',
       'December',
     ];
-    return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 900;
-        return SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(32, 24, 32, 36),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'DASHBOARD',
-                style: TextStyle(
-                  color: DailyColors.burgundy,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.8,
-                ),
-              ),
-              const SizedBox(height: 7),
-              const Text(
-                'Good morning,\nSupplier.',
-                style: TextStyle(
-                  color: DailyColors.charcoal,
-                  fontSize: 40,
-                  height: .98,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 9),
-              Text(
-                _today(),
-                style: const TextStyle(
-                  color: DailyColors.gray,
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 17),
-              if (wide)
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      flex: 6,
-                      child: _leftColumn(context),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      flex: 4,
-                      child: _rightColumn(),
-                    ),
-                  ],
-                )
-              else
-                Column(
-                  children: [
-                    _leftColumn(context),
-                    const SizedBox(height: 13),
-                    _rightColumn(),
-                  ],
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _leftColumn(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionHeading('Today\'s distribution'),
-        const SizedBox(height: 7),
-        Container(
-          padding: const EdgeInsets.all(28),
-          decoration: const BoxDecoration(
-            color: DailyColors.charcoal,
-            border: Border.fromBorderSide(
-              BorderSide(color: DailyColors.charcoal),
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Morning circulation',
-                      style: TextStyle(
-                        color: DailyColors.white,
-                        fontSize: 23,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    color: DailyColors.burgundy,
-                    child: const Text(
-                      'ON TRACK',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: .8,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              const Text(
-                'Distribution progress across all active routes.',
-                style: TextStyle(
-                  color: Color(0xFFC8BBA8),
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 19),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text(
-                    '2,244',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 40,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 7, bottom: 5),
-                    child: Text(
-                      'of 2,480 delivered',
-                      style: TextStyle(
-                        color: Color(0xFFC8BBA8),
-                        fontSize: 16,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(2),
-                child: const LinearProgressIndicator(
-                  value: .905,
-                  minHeight: 7,
-                  color: Color(0xFFE5C9A8),
-                  backgroundColor: Color(0xFF5D5A56),
-                ),
-              ),
-              const SizedBox(height: 14),
-              const Row(
-                children: [
-                  _DarkStat('96.2%', 'ON-TIME'),
-                  SizedBox(width: 24),
-                  _DarkStat('18', 'ACTIVE ROUTES'),
-                  SizedBox(width: 24),
-                  _DarkStat('236', 'REMAINING'),
-                ],
-              ),
-              const SizedBox(height: 15),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SupplierDistributionScreen(),
-                    ),
-                  ),
-                  style: TextButton.styleFrom(
-                    foregroundColor: const Color(0xFFE5C9A8),
-                    padding: EdgeInsets.zero,
-                  ),
-                  child: const Text(
-                    'VIEW DISTRIBUTION \u2192',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: .8,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 17),
-        Row(
-          children: [
-            const Expanded(child: _SectionHeading('Recent activity')),
-            TextButton(
-              onPressed: () {},
-              child: const Text(
-                'VIEW ALL',
-                style: TextStyle(
-                  color: DailyColors.burgundy,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 5),
-        _panel(
-          Column(
-            children: [
-              _ActivityRow(
-                time: '07:42 AM',
-                title: 'Route 12 completed',
-                detail: 'North Sector \u00B7 150 deliveries',
-                color: DailyColors.success,
-              ),
-              _ActivityRow(
-                time: '07:18 AM',
-                title: 'Stock replenished',
-                detail: 'The Times of India \u00B7 240 copies',
-                color: DailyColors.burgundy,
-              ),
-              _ActivityRow(
-                time: '06:55 AM',
-                title: 'Issue reported',
-                detail: 'Route 17 \u00B7 Missing newspaper',
-                color: DailyColors.warning,
-              ),
-              _ActivityRow(
-                time: 'Yesterday',
-                title: 'Payout reconciliation',
-                detail: '3 delivery partners pending',
-                color: DailyColors.gray,
-                last: true,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _rightColumn() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionHeading('Quick overview'),
-        const SizedBox(height: 7),
-        _panel(
-          Column(
-            children: [
-              const _OverviewRow('Active subscriptions', '2,480'),
-              const _OverviewRow('Newspapers in circulation', '18'),
-              const _OverviewRow('Customers served', '1,126'),
-              const _OverviewRow('Collections due', '\u20B928,450', last: true),
-            ],
-          ),
-        ),
-        const SizedBox(height: 17),
-        const _SectionHeading('Supply issues'),
-        const SizedBox(height: 7),
-        _panel(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const _IssueRow(
-                icon: Icons.inventory_2_outlined,
-                title: 'Low stock alert',
-                detail: 'The Hindu \u00B7 42 copies remaining',
-                color: DailyColors.warning,
-              ),
-              const _IssueRow(
-                icon: Icons.report_problem_outlined,
-                title: 'Open complaints',
-                detail: '2 delivery issues need attention',
-                color: DailyColors.burgundy,
-              ),
-              const _IssueRow(
-                icon: Icons.payments_outlined,
-                title: 'Partner payouts',
-                detail: '3 reconciliations pending',
-                color: DailyColors.gray,
-                last: true,
-              ),
-              const SizedBox(height: 10),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: DailyColors.burgundy,
-                    side: const BorderSide(color: DailyColors.burgundy),
-                    shape: const RoundedRectangleBorder(),
-                  ),
-                  child: const Text(
-                    'REVIEW ALL ISSUES',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _panel(Widget child) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-      decoration: BoxDecoration(
-        color: DailyColors.white,
-        border: Border.all(color: DailyColors.divider),
-      ),
-      child: child,
-    );
+    return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 }
 
-class _SectionHeading extends StatelessWidget {
-  final String text;
-
-  const _SectionHeading(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text.toUpperCase(),
-      style: const TextStyle(
-        color: DailyColors.burgundy,
-        fontSize: 15,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
-      ),
-    );
-  }
-}
-
-class _DarkStat extends StatelessWidget {
-  final String value;
-  final String label;
-
-  const _DarkStat(this.value, this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFFC8BBA8),
-            fontSize: 14,
-            letterSpacing: .7,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _OverviewRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool last;
-
-  const _OverviewRow(this.label, this.value, {this.last = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 13),
-      decoration: BoxDecoration(
-        border: last
-            ? null
-            : const Border(
-                bottom: BorderSide(color: DailyColors.divider),
-              ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 16, color: DailyColors.gray),
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: DailyColors.charcoal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActivityRow extends StatelessWidget {
-  final String time;
-  final String title;
-  final String detail;
-  final Color color;
-  final bool last;
-
-  const _ActivityRow({
-    required this.time,
-    required this.title,
-    required this.detail,
-    required this.color,
-    this.last = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 11),
-      decoration: BoxDecoration(
-        border: last
-            ? null
-            : const Border(
-                bottom: BorderSide(color: DailyColors.divider),
-              ),
-      ),
-      child: Row(
-        children: [
-          StatusDot(color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  detail,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: DailyColors.gray,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            time,
-            style: const TextStyle(
-              fontSize: 14,
-              color: DailyColors.gray,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _IssueRow extends StatelessWidget {
+class _StateMessage extends StatelessWidget {
   final IconData icon;
-  final String title;
-  final String detail;
-  final Color color;
-  final bool last;
-
-  const _IssueRow({
-    required this.icon,
-    required this.title,
-    required this.detail,
-    required this.color,
-    this.last = false,
-  });
-
+  final String text;
+  final VoidCallback? retry;
+  const _StateMessage({required this.icon, required this.text, this.retry});
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        border: last
-            ? null
-            : const Border(
-                bottom: BorderSide(color: DailyColors.divider),
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.symmetric(vertical: 46),
+    decoration: BoxDecoration(
+      color: DailyColors.white,
+      border: Border.all(color: DailyColors.divider),
+    ),
+    child: Column(
+      children: [
+        Icon(icon, size: 30, color: DailyColors.gray),
+        const SizedBox(height: 10),
+        Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        if (retry != null)
+          TextButton(
+            onPressed: retry,
+            child: const Text(
+              'RETRY',
+              style: TextStyle(
+                color: DailyColors.burgundy,
+                fontWeight: FontWeight.bold,
               ),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 17),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  detail,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    color: DailyColors.gray,
-                  ),
-                ),
-              ],
             ),
           ),
-          const Icon(
-            Icons.chevron_right,
-            size: 17,
-            color: DailyColors.gray,
-          ),
-        ],
-      ),
-    );
-  }
+      ],
+    ),
+  );
 }
-
-
-

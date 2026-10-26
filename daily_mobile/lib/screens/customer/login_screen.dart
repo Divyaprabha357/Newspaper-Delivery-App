@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../../services/customer_api_service.dart';
+import '../../services/session_service.dart';
 import '../../widgets/daily_widgets.dart';
+import 'customer_dashboard_screen.dart';
 
 enum LoginType { phone, email }
 
 class LoginScreen extends StatefulWidget {
   final LoginType loginType;
+  final CustomerApiService? apiService;
 
-  const LoginScreen({super.key, required this.loginType});
+  const LoginScreen({
+    super.key,
+    required this.loginType,
+    this.apiService,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -19,6 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   bool obscurePassword = true;
+  bool loading = false;
 
   @override
   void dispose() {
@@ -204,32 +213,82 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
 
-                        onPressed: () {
-                          if (identifierController.text.isEmpty ||
-                              passwordController.text.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Please enter your login details.',
-                                ),
-                              ),
-                            );
+                        onPressed: loading ? () {} : () async {
+                          if (loading) return;
 
+                          final rawId = identifierController.text.trim();
+                          final rawPassword = passwordController.text;
+
+                          if (rawId.isEmpty) {
+                            _snack(isPhone
+                                ? 'Please enter your phone number.'
+                                : 'Please enter your email address.');
                             return;
                           }
 
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Login will be connected to the DAILY database.',
+                          if (isPhone) {
+                            final digits = rawId.replaceAll(RegExp(r'\D'), '');
+                            if (digits.length < 10) {
+                              _snack('Please enter a valid 10-digit phone number.');
+                              return;
+                            }
+                          } else {
+                            final emailRegex = RegExp(
+                                r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+                            if (!emailRegex.hasMatch(rawId)) {
+                              _snack('Please enter a valid email address.');
+                              return;
+                            }
+                          }
+
+                          if (rawPassword.isEmpty) {
+                            _snack('Please enter your password.');
+                            return;
+                          }
+
+                          setState(() => loading = true);
+                          final nav = Navigator.of(context);
+                          try {
+                            final api = widget.apiService ?? CustomerApiService();
+                            final data = await api.login(
+                              emailOrPhone: rawId,
+                              password: rawPassword,
+                              role: 'CUSTOMER',
+                            );
+                            final user = Map<String, dynamic>.from(
+                                data['user'] as Map? ?? {});
+                            final role =
+                                (user['role'] ?? '').toString().toUpperCase();
+                            if (role != 'CUSTOMER' ||
+                                user['customer_id'] == null) {
+                              throw const CustomerApiException(
+                                'This account is not authorized as a Customer account.',
+                                statusCode: 403,
+                              );
+                            }
+                            await SessionService.saveCustomer(user);
+                            if (!mounted) return;
+                            nav.pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const CustomerDashboardScreen(),
                               ),
-                            ),
-                          );
+                            );
+                          } on CustomerApiException catch (error) {
+                            if (mounted) _snack(error.message);
+                          } catch (_) {
+                            if (mounted) {
+                              _snack(
+                                  'Unable to connect to the DAILY server. Please try again.');
+                            }
+                          } finally {
+                            if (mounted) setState(() => loading = false);
+                          }
                         },
 
-                        child: const Text(
-                          'SIGN IN',
-                          style: TextStyle(
+                        child: Text(
+                          loading ? 'SIGNING IN...' : 'SIGN IN',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             letterSpacing: 1.5,
                           ),
@@ -242,6 +301,17 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _snack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFF7A1F1F),
       ),
     );
   }

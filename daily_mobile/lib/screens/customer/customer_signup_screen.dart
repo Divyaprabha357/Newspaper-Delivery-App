@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../services/customer_api_service.dart';
+import '../../services/session_service.dart';
 import '../../widgets/daily_widgets.dart';
+import 'customer_dashboard_screen.dart';
 
 class CustomerSignupScreen extends StatefulWidget {
   const CustomerSignupScreen({super.key});
@@ -29,6 +32,8 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
 
   bool obscurePassword = true;
   bool obscureConfirmPassword = true;
+  bool terms = false;
+  bool loading = false;
 
   @override
   void dispose() {
@@ -68,51 +73,55 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
     }
   }
 
-  void createAccount() {
-    if (passwordController.text.isEmpty ||
-        confirmPasswordController.text.isEmpty) {
-      showMessage('Please enter and confirm your password.');
-
+  Future<void> createAccount() async {
+    if (passwordController.text.isEmpty) {
+      showMessage('Please create a password.');
       return;
     }
-
+    if (passwordController.text.length < 6) {
+      showMessage('Password must be at least 6 characters long.');
+      return;
+    }
+    if (confirmPasswordController.text.isEmpty) {
+      showMessage('Please confirm your password.');
+      return;
+    }
     if (passwordController.text != confirmPasswordController.text) {
       showMessage('Passwords do not match.');
-
+      return;
+    }
+    if (!terms) {
+      showMessage('Please accept the Terms & Conditions.');
       return;
     }
 
-    showDialog(
-      context: context,
-
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFFF5ECE0),
-
-          title: const Text(
-            'ACCOUNT CREATED',
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-
-          content: const Text('Your DAILY customer account has been created.'),
-
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-
-                Navigator.popUntil(context, (route) => route.isFirst);
-              },
-
-              child: const Text(
-                'CONTINUE',
-                style: TextStyle(color: Color(0xFF7A1F1F)),
-              ),
-            ),
-          ],
-        );
-      },
-    );
+    setState(() => loading = true);
+    try {
+      final data = await CustomerApiService().register(
+        name: nameController.text.trim(),
+        email: emailController.text.trim(),
+        phone: phoneController.text.trim(),
+        address: addressController.text.trim(),
+        password: passwordController.text,
+      );
+      final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
+      if (user['customer_id'] == null) {
+        throw const CustomerApiException('Customer account could not be initialized.');
+      }
+      await SessionService.saveCustomer(user);
+      if (!mounted) return;
+      showMessage('Account created successfully!');
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const CustomerDashboardScreen()),
+      );
+    } on CustomerApiException catch (error) {
+      if (mounted) showMessage(error.message);
+    } catch (_) {
+      if (mounted) showMessage('Unable to connect to the DAILY server.');
+    } finally {
+      if (mounted) setState(() => loading = false);
+    }
   }
 
   void showMessage(String message) {
@@ -308,9 +317,25 @@ class _CustomerSignupScreenState extends State<CustomerSignupScreen> {
             },
           ),
 
-          const SizedBox(height: 35),
+          const SizedBox(height: 18),
 
-          buildNextButton(text: 'CREATE ACCOUNT', onPressed: createAccount),
+          CheckboxListTile(
+            contentPadding: EdgeInsets.zero,
+            value: terms,
+            activeColor: const Color(0xFF7A1F1F),
+            onChanged: (v) => setState(() => terms = v ?? false),
+            title: const Text(
+              'I agree to the Terms & Conditions',
+              style: TextStyle(fontSize: 12),
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          buildNextButton(
+            text: loading ? 'CREATING ACCOUNT...' : 'CREATE ACCOUNT',
+            onPressed: loading ? () {} : createAccount,
+          ),
         ],
       ),
     );

@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
-import 'feedback_alert_screen.dart';
 import 'about_screen.dart';
 import 'delivery_history_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_details_screen.dart';
 import 'service_request_screen.dart';
-import '../../services/session_service.dart';
 import '../../services/customer_api_service.dart';
-import '../welcome_screen.dart';
+import '../../services/session_service.dart';
+import 'auth_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -34,7 +33,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _loadProfile() async {
     final id = await SessionService.getCustomerId();
     if (id == null) {
-      if (mounted) setState(() { _loading = false; _error = 'Your session has expired.'; });
+      await SessionService.logOut();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const AuthScreen(role: 'CUSTOMER')),
+        (route) => false,
+      );
       return;
     }
     try {
@@ -132,7 +136,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         context,
                         'Profile',
                         Icons.person_outline,
-                        const ProfileDetailsScreen(),
+                        ProfileDetailsScreen(customer: _customer),
                       ),
                     if (_matches('Delivery History'))
                       _row(
@@ -151,7 +155,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 14),
                   ],
                   if (_matches('Help & Support') ||
-                      _matches('Feedback & Alerts') ||
                       _matches('About Us')) ...[
                     const SectionLabel('Help & Support'),
                     if (_matches('Help & Support'))
@@ -160,13 +163,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         'Help & Support',
                         Icons.support_agent,
                         const ServiceRequestScreen(),
-                      ),
-                    if (_matches('Feedback & Alerts'))
-                      _row(
-                        context,
-                        'Feedback & Alerts',
-                        Icons.notifications_active_outlined,
-                        const FeedbackAlertScreen(),
                       ),
                     if (_matches('About Us'))
                       _row(
@@ -177,36 +173,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     const SizedBox(height: 14),
                   ],
-                  if (_matches('Settings') ||
-                      _matches('Feedback & Alerts')) ...[
+                  if (_matches('Settings')) ...[
                     const SectionLabel('Settings'),
-                    if (_matches('Settings'))
-                      _row(
-                        context,
-                        'Settings',
-                        Icons.settings_outlined,
-                        const ProfileDetailsScreen(),
-                      ),
-                    if (_matches('Feedback & Alerts')) ...[
-                      const SizedBox(height: 12),
-                      OutlinedButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const FeedbackAlertScreen(),
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: DailyColors.burgundy,
-                          side: const BorderSide(color: DailyColors.divider),
-                          shape: const RoundedRectangleBorder(),
-                        ),
-                        child: const Text(
-                          'VIEW FEEDBACK & ALERTS',
-                          style: TextStyle(fontSize: 12),
-                        ),
-                      ),
-                    ],
+                    _row(
+                      context,
+                      'Settings',
+                      Icons.settings_outlined,
+                      ProfileDetailsScreen(customer: _customer),
+                    ),
                     const SizedBox(height: 14),
                   ],
                   if (_query.isNotEmpty &&
@@ -214,7 +188,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       !_matches('Delivery History') &&
                       !_matches('Notifications') &&
                       !_matches('Help & Support') &&
-                      !_matches('Feedback & Alerts') &&
                       !_matches('About Us') &&
                       !_matches('Settings'))
                     const Padding(
@@ -285,7 +258,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (!context.mounted) return;
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+                MaterialPageRoute(builder: (_) => const AuthScreen(role: 'CUSTOMER')),
                 (route) => false,
               );
             },
