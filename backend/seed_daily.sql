@@ -1,24 +1,23 @@
 -- ============================================================================
 -- DAILY — Realistic Development / Demo Data Seed Script
 -- Database: newspaper_delivery
--- Target Date: 2026-10-26
+-- Target Dates: 2026-10-28 (Today) and 2026-10-26
 --
 -- REQUIREMENTS SATISFIED:
 -- 1. 3 Suppliers (Mumbai Daily, Western News, Metro Press Supply)
 -- 2. 300 Demo Customers (~100 assigned per supplier zone)
 -- 3. 15 Delivery Partners (5 assigned per supplier zone)
--- 4. 15 Routes & Daily Routes for 2026-10-26
+-- 4. 15 Routes & Daily Routes for target date
 -- 5. Partner Assignments & 300 Customer Assignments (20 customers / partner)
 -- 6. Active Subscriptions, Addresses & Catalogs
--- 7. Deliveries & Delivery Items populated for 2026-10-26 (and past 6 days)
--- 8. Delivery Confirmations, Complaints, Notifications, and Customer Requests
+-- 7. Deliveries & Delivery Items populated for 2026-10-28 (and 2026-10-26)
+-- 8. Delivery Confirmations, Notifications, and Customer Requests
 -- 9. Idempotent: safe to rerun without duplicates (uses WHERE NOT EXISTS / unique keys)
 -- 10. Non-destructive: does not delete, truncate, or overwrite existing records
 -- ============================================================================
 
 USE newspaper_delivery;
 
-SET @target_date := '2026-10-26';
 START TRANSACTION;
 
 -- ----------------------------------------------------------------------------
@@ -47,26 +46,30 @@ WHERE NOT EXISTS (
 );
 
 -- ----------------------------------------------------------------------------
--- 2. CORE SUPPLIERS (3 Suppliers)
+-- 2. CORE SUPPLIERS (Ensure Supplier 1, Supplier 2, and Supplier 3 exist)
 -- ----------------------------------------------------------------------------
+-- Supplier 1 (Mumbai Daily Distributors) and Supplier 2 (Western News Distributors)
+-- already exist in the database (user_id 5 and 6, supplier_id 1 and 2).
+-- Insert Supplier 3 (Metro Press Supply) only if missing:
 INSERT INTO users (name, email, phone, password_hash, role, status)
-SELECT v.name, v.email, v.phone, NULL, 'SUPPLIER', 'ACTIVE'
-FROM (
-    SELECT 'Mumbai Daily Distributors' name, 'mumbai.supplier@daily.local' email, '9800000301' phone UNION ALL
-    SELECT 'Western News Distributors', 'western.supplier@daily.local', '9800000302' UNION ALL
-    SELECT 'Metro Press Supply', 'metro.supplier@daily.local', '9800000303'
-) v
-WHERE NOT EXISTS (SELECT 1 FROM users u WHERE u.email = v.email OR u.phone = v.phone);
+SELECT 'Metro Press Supply', 'metro.supplier@daily.local', '9800000303', NULL, 'SUPPLIER', 'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1 FROM users WHERE email = 'metro.supplier@daily.local' OR phone = '9800000303'
+);
 
 INSERT INTO suppliers (user_id, supplier_name, contact_number, address, status)
-SELECT u.user_id, v.supplier_name, v.phone, v.address, 'ACTIVE'
-FROM (
-    SELECT 'mumbai.supplier@daily.local' email, 'Mumbai Daily Distributors' supplier_name, '9800000301' phone, 'Dadar West, Mumbai, Maharashtra 400028' address UNION ALL
-    SELECT 'western.supplier@daily.local', 'Western News Distributors', '9800000302', 'Bandra West, Mumbai, Maharashtra 400050' UNION ALL
-    SELECT 'metro.supplier@daily.local', 'Metro Press Supply', '9800000303', 'Andheri West, Mumbai, Maharashtra 400058'
-) v
-JOIN users u ON u.email = v.email
-WHERE NOT EXISTS (SELECT 1 FROM suppliers s WHERE s.user_id = u.user_id);
+SELECT u.user_id, 'Metro Press Supply', '9800000303', 'Andheri West, Mumbai, Maharashtra 400058', 'ACTIVE'
+FROM users u
+WHERE u.email = 'metro.supplier@daily.local'
+  AND NOT EXISTS (SELECT 1 FROM suppliers s WHERE s.user_id = u.user_id);
+
+-- Dynamically resolve supplier IDs
+SELECT COALESCE((SELECT supplier_id FROM suppliers WHERE supplier_id = 1), 1) INTO @supp1_id;
+SELECT COALESCE((SELECT supplier_id FROM suppliers WHERE supplier_id = 2), 2) INTO @supp2_id;
+SELECT COALESCE(
+    (SELECT s.supplier_id FROM suppliers s JOIN users u ON u.user_id = s.user_id WHERE u.email = 'metro.supplier@daily.local' LIMIT 1),
+    (SELECT supplier_id FROM suppliers ORDER BY supplier_id DESC LIMIT 1)
+) INTO @supp3_id;
 
 -- ----------------------------------------------------------------------------
 -- 3. DELIVERY PARTNERS (15 Delivery Partners)
@@ -168,47 +171,37 @@ WHERE u.role = 'CUSTOMER' AND u.email LIKE 'cust%.demo@daily.local'
 -- 5. SUPPLIER AREAS & COVERAGE
 -- ----------------------------------------------------------------------------
 INSERT INTO supplier_areas (supplier_id, area_id, status)
-SELECT s.supplier_id, a.area_id, 'ACTIVE'
-FROM suppliers s
-JOIN users u ON u.user_id = s.user_id
-JOIN areas a ON a.city = 'Mumbai'
-WHERE (u.email = 'mumbai.supplier@daily.local' AND a.area_name IN ('Dadar West', 'Dadar East', 'Matunga', 'Mahim', 'Prabhadevi'))
-   OR (u.email = 'western.supplier@daily.local' AND a.area_name IN ('Bandra West', 'Khar West', 'Santacruz West', 'Worli'))
-   OR (u.email = 'metro.supplier@daily.local' AND a.area_name IN ('Andheri West', 'Andheri East', 'Juhu', 'Vile Parle West'))
+SELECT v.supplier_id, a.area_id, 'ACTIVE'
+FROM (
+    SELECT @supp1_id AS supplier_id, a.area_id
+    FROM areas a
+    WHERE a.area_name IN ('Dadar West', 'Dadar East', 'Matunga', 'Mahim', 'Prabhadevi')
+    UNION ALL
+    SELECT @supp2_id AS supplier_id, a.area_id
+    FROM areas a
+    WHERE a.area_name IN ('Bandra West', 'Khar West', 'Santacruz West', 'Worli')
+    UNION ALL
+    SELECT @supp3_id AS supplier_id, a.area_id
+    FROM areas a
+    WHERE a.area_name IN ('Andheri West', 'Andheri East', 'Juhu', 'Vile Parle West')
+) v
+JOIN areas a ON a.area_id = v.area_id
+JOIN suppliers s ON s.supplier_id = v.supplier_id
 ON DUPLICATE KEY UPDATE status = 'ACTIVE';
 
 -- ----------------------------------------------------------------------------
 -- 6. NEWSPAPERS & SUPPLIER CATALOG
 -- ----------------------------------------------------------------------------
-INSERT INTO newspapers (newspaper_name, language, publication_type, status)
-SELECT v.name, v.lang, v.type, 'ACTIVE'
-FROM (
-    SELECT 'The Times of India' name, 'English' lang, 'National' type UNION ALL
-    SELECT 'Hindustan Times', 'English', 'National' UNION ALL
-    SELECT 'The Indian Express', 'English', 'National' UNION ALL
-    SELECT 'Loksatta', 'Marathi', 'Regional' UNION ALL
-    SELECT 'Maharashtra Times', 'Marathi', 'Regional' UNION ALL
-    SELECT 'Mumbai Chronicle', 'English', 'Local' UNION ALL
-    SELECT 'City Morning', 'English', 'Local' UNION ALL
-    SELECT 'Business Standard', 'English', 'Business' UNION ALL
-    SELECT 'The Economic Times', 'English', 'Business' UNION ALL
-    SELECT 'Sports Daily', 'English', 'Sports'
-) v
-WHERE NOT EXISTS (SELECT 1 FROM newspapers n WHERE n.newspaper_name = v.name);
-
 INSERT INTO newspaper_prices (newspaper_id, price_per_delivery, effective_from)
 SELECT n.newspaper_id, v.price, '2026-01-01'
 FROM (
     SELECT 'The Times of India' name, 6.00 price UNION ALL
     SELECT 'Hindustan Times', 5.00 UNION ALL
-    SELECT 'The Indian Express', 5.50 UNION ALL
     SELECT 'Loksatta', 5.00 UNION ALL
-    SELECT 'Maharashtra Times', 5.00 UNION ALL
     SELECT 'Mumbai Chronicle', 4.00 UNION ALL
+    SELECT 'Maharashtra Today', 4.50 UNION ALL
     SELECT 'City Morning', 4.00 UNION ALL
-    SELECT 'Business Standard', 7.00 UNION ALL
-    SELECT 'The Economic Times', 8.00 UNION ALL
-    SELECT 'Sports Daily', 4.50
+    SELECT 'The Daily Herald', 5.50
 ) v
 JOIN newspapers n ON n.newspaper_name = v.name
 WHERE NOT EXISTS (
@@ -216,14 +209,22 @@ WHERE NOT EXISTS (
 );
 
 INSERT INTO supplier_newspapers (supplier_id, newspaper_id, status, available_from)
-SELECT s.supplier_id, n.newspaper_id, 'ACTIVE', '2026-01-01'
-FROM suppliers s
-JOIN users u ON u.user_id = s.user_id
-JOIN newspapers n ON (
-    (u.email = 'mumbai.supplier@daily.local' AND n.newspaper_name IN ('The Times of India', 'Mumbai Chronicle', 'Loksatta', 'Maharashtra Times', 'City Morning')) OR
-    (u.email = 'western.supplier@daily.local' AND n.newspaper_name IN ('The Times of India', 'Hindustan Times', 'The Indian Express', 'Business Standard')) OR
-    (u.email = 'metro.supplier@daily.local' AND n.newspaper_name IN ('Hindustan Times', 'The Economic Times', 'Sports Daily', 'City Morning'))
-)
+SELECT v.supplier_id, n.newspaper_id, 'ACTIVE', '2026-01-01'
+FROM (
+    SELECT @supp1_id AS supplier_id, n.newspaper_id
+    FROM newspapers n
+    WHERE n.newspaper_name IN ('The Times of India', 'Mumbai Chronicle', 'Loksatta', 'Maharashtra Today', 'City Morning')
+    UNION ALL
+    SELECT @supp2_id AS supplier_id, n.newspaper_id
+    FROM newspapers n
+    WHERE n.newspaper_name IN ('The Times of India', 'Hindustan Times', 'The Daily Herald', 'Loksatta')
+    UNION ALL
+    SELECT @supp3_id AS supplier_id, n.newspaper_id
+    FROM newspapers n
+    WHERE n.newspaper_name IN ('Hindustan Times', 'City Morning', 'The Daily Herald', 'Maharashtra Today')
+) v
+JOIN newspapers n ON n.newspaper_id = v.newspaper_id
+JOIN suppliers s ON s.supplier_id = v.supplier_id
 ON DUPLICATE KEY UPDATE status = 'ACTIVE';
 
 -- ----------------------------------------------------------------------------
@@ -241,13 +242,13 @@ SELECT c.customer_id,
 FROM customers c
 JOIN users u ON u.user_id = c.user_id
 JOIN areas a ON a.area_name = CASE
-    -- Customers 1-100: Central Zone (Supplier 1)
+    -- Customers 1-100: Central Zone (Supplier 1: Mumbai Daily)
     WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 100
         THEN ELT(MOD(c.customer_id, 5) + 1, 'Dadar West', 'Dadar East', 'Matunga', 'Mahim', 'Prabhadevi')
-    -- Customers 101-200: Western Zone (Supplier 2)
+    -- Customers 101-200: Western Zone (Supplier 2: Western News)
     WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 200
         THEN ELT(MOD(c.customer_id, 4) + 1, 'Bandra West', 'Khar West', 'Santacruz West', 'Worli')
-    -- Customers 201-300: Metro Zone (Supplier 3)
+    -- Customers 201-300: Metro Zone (Supplier 3: Metro Press)
     ELSE ELT(MOD(c.customer_id, 4) + 1, 'Andheri West', 'Andheri East', 'Juhu', 'Vile Parle West')
 END
 WHERE u.email LIKE 'cust%.demo@daily.local'
@@ -259,30 +260,29 @@ WHERE u.email LIKE 'cust%.demo@daily.local'
 INSERT INTO subscriptions (customer_id, newspaper_id, supplier_id, address_id, start_date, end_date, status, delivery_days, scheduled_delivery_time, agreed_price)
 SELECT c.customer_id,
        n.newspaper_id,
-       s.supplier_id,
+       CASE
+           WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 100 THEN @supp1_id
+           WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 200 THEN @supp2_id
+           ELSE @supp3_id
+       END AS supplier_id,
        ca.address_id,
        '2026-01-01' AS start_date,
        NULL AS end_date,
        'ACTIVE' AS status,
        'MON,TUE,WED,THU,FRI,SAT,SUN' AS delivery_days,
        '06:30:00' AS scheduled_delivery_time,
-       np.price_per_delivery AS agreed_price
+       COALESCE(np.price_per_delivery, 5.00) AS agreed_price
 FROM customers c
 JOIN users u ON u.user_id = c.user_id
 JOIN customer_addresses ca ON ca.customer_id = c.customer_id AND ca.is_active = TRUE
-JOIN suppliers s ON s.supplier_id = CASE
-    WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 100 THEN (SELECT supplier_id FROM suppliers s2 JOIN users u2 ON u2.user_id = s2.user_id WHERE u2.email = 'mumbai.supplier@daily.local' LIMIT 1)
-    WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 200 THEN (SELECT supplier_id FROM suppliers s2 JOIN users u2 ON u2.user_id = s2.user_id WHERE u2.email = 'western.supplier@daily.local' LIMIT 1)
-    ELSE (SELECT supplier_id FROM suppliers s2 JOIN users u2 ON u2.user_id = s2.user_id WHERE u2.email = 'metro.supplier@daily.local' LIMIT 1)
-END
 JOIN newspapers n ON n.newspaper_name = CASE
     WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 100
-        THEN ELT(MOD(c.customer_id, 4) + 1, 'The Times of India', 'Mumbai Chronicle', 'Loksatta', 'Maharashtra Times')
+        THEN ELT(MOD(c.customer_id, 4) + 1, 'The Times of India', 'Mumbai Chronicle', 'Loksatta', 'Maharashtra Today')
     WHEN CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(u.email, '@', 1), 'cust', -1) AS UNSIGNED) <= 200
-        THEN ELT(MOD(c.customer_id, 3) + 1, 'The Times of India', 'Hindustan Times', 'The Indian Express')
-    ELSE ELT(MOD(c.customer_id, 3) + 1, 'Hindustan Times', 'The Economic Times', 'City Morning')
+        THEN ELT(MOD(c.customer_id, 3) + 1, 'The Times of India', 'Hindustan Times', 'The Daily Herald')
+    ELSE ELT(MOD(c.customer_id, 3) + 1, 'Hindustan Times', 'City Morning', 'Maharashtra Today')
 END
-JOIN newspaper_prices np ON np.newspaper_id = n.newspaper_id
+LEFT JOIN newspaper_prices np ON np.newspaper_id = n.newspaper_id
 WHERE u.email LIKE 'cust%.demo@daily.local'
   AND NOT EXISTS (
       SELECT 1 FROM subscriptions sub
@@ -290,7 +290,7 @@ WHERE u.email LIKE 'cust%.demo@daily.local'
   );
 
 -- ----------------------------------------------------------------------------
--- 9. ROUTES (15 routes for 15 delivery partners)
+-- 9. ROUTES (15 routes across service zones)
 -- ----------------------------------------------------------------------------
 INSERT INTO routes (area_id, route_name, status)
 SELECT a.area_id, v.route_name, 'ACTIVE'
@@ -320,16 +320,21 @@ WHERE NOT EXISTS (
 );
 
 -- ----------------------------------------------------------------------------
--- 10. DAILY ROUTES & PARTNER ASSIGNMENTS FOR 2026-10-26
+-- 10. DAILY ROUTES & PARTNER ASSIGNMENTS FOR 2026-10-28 AND 2026-10-26
 -- ----------------------------------------------------------------------------
+-- Create daily routes for both 2026-10-28 (Today) and 2026-10-26 (Past Demo Date)
 INSERT INTO daily_routes (route_id, route_date, status)
-SELECT r.route_id, @target_date, 'ACTIVE'
+SELECT r.route_id, d.target_date, 'ACTIVE'
 FROM routes r
+CROSS JOIN (
+    SELECT '2026-10-28' AS target_date UNION ALL
+    SELECT '2026-10-26'
+) d
 WHERE NOT EXISTS (
-    SELECT 1 FROM daily_routes dr WHERE dr.route_id = r.route_id AND dr.route_date = @target_date
+    SELECT 1 FROM daily_routes dr WHERE dr.route_id = r.route_id AND dr.route_date = d.target_date
 );
 
--- Assign partners 1..15 to routes 1..15 for target date
+-- Assign 15 partners to 15 routes for target dates
 INSERT INTO route_partners (daily_route_id, partner_id, shift_start, shift_end)
 SELECT dr.daily_route_id, dp.partner_id, '05:30:00', '10:30:00'
 FROM daily_routes dr
@@ -343,14 +348,14 @@ JOIN (
            ROW_NUMBER() OVER (ORDER BY dp.partner_id) AS p_num
     FROM delivery_partners dp
 ) dp ON dp.p_num = r_map.r_num
-WHERE dr.route_date = @target_date
+WHERE dr.route_date IN ('2026-10-28', '2026-10-26')
   AND NOT EXISTS (
       SELECT 1 FROM route_partners rp
       WHERE rp.daily_route_id = dr.daily_route_id AND rp.partner_id = dp.partner_id
   );
 
 -- ----------------------------------------------------------------------------
--- 11. CUSTOMER ASSIGNMENTS FOR 2026-10-26 (300 customer assignments)
+-- 11. CUSTOMER ASSIGNMENTS FOR TARGET DATES (300 customer assignments)
 -- ----------------------------------------------------------------------------
 INSERT INTO customer_assignments (daily_route_id, partner_id, customer_id, address_id, sequence_number, status)
 SELECT dr.daily_route_id,
@@ -362,7 +367,7 @@ SELECT dr.daily_route_id,
 FROM customers c
 JOIN customer_addresses ca ON ca.customer_id = c.customer_id AND ca.is_active = TRUE
 JOIN routes r ON r.area_id = ca.area_id
-JOIN daily_routes dr ON dr.route_id = r.route_id AND dr.route_date = @target_date
+JOIN daily_routes dr ON dr.route_id = r.route_id AND dr.route_date IN ('2026-10-28', '2026-10-26')
 JOIN route_partners rp ON rp.daily_route_id = dr.daily_route_id
 WHERE NOT EXISTS (
     SELECT 1 FROM customer_assignments old
@@ -372,7 +377,7 @@ WHERE NOT EXISTS (
 );
 
 -- ----------------------------------------------------------------------------
--- 12. DELIVERIES FOR 2026-10-26 (300 deliveries with realistic status mix)
+-- 12. DELIVERIES FOR TARGET DATES (300 deliveries with realistic status mix)
 -- ----------------------------------------------------------------------------
 INSERT INTO delivery_failure_reasons (reason_name, category, charge_customer)
 SELECT v.name, v.cat, FALSE
@@ -390,7 +395,7 @@ INSERT INTO deliveries (assignment_id, customer_id, partner_id, delivery_date, s
 SELECT ca.assignment_id,
        ca.customer_id,
        ca.partner_id,
-       @target_date AS delivery_date,
+       dr.route_date AS delivery_date,
        '06:30:00' AS scheduled_time,
        CASE
            -- DELIVERED: drop times between 06:15 and 07:45
@@ -399,7 +404,7 @@ SELECT ca.assignment_id,
            -- DELAYED: arrived after 08:00
            WHEN MOD(ca.assignment_id, 10) = 7
                THEN '08:15:00'
-           -- PARTIALLY_DELIVERED / NOT_DELIVERED: no actual delivery time or partial
+           -- PARTIALLY_DELIVERED / NOT_DELIVERED:
            WHEN MOD(ca.assignment_id, 10) = 9
                THEN '07:10:00'
            ELSE NULL
@@ -418,21 +423,21 @@ SELECT ca.assignment_id,
        END AS failure_reason_id,
        CASE
            WHEN MOD(ca.assignment_id, 10) NOT IN (3, 7, 9) THEN 'Delivered at doorstep.'
-           WHEN MOD(ca.assignment_id, 10) = 7 THEN 'Route delayed due to monsoon road conditions.'
+           WHEN MOD(ca.assignment_id, 10) = 7 THEN 'Route delayed due to morning traffic/weather.'
            WHEN MOD(ca.assignment_id, 10) = 9 THEN 'Main newspaper delivered; supplement pending press arrival.'
            ELSE 'Customer gate was locked; delivery attempted at 06:45 AM.'
        END AS remarks,
-       TIMESTAMP(DATE_ADD(@target_date, INTERVAL 1 DAY), '11:00:00') AS editable_until
+       TIMESTAMP(DATE_ADD(dr.route_date, INTERVAL 1 DAY), '11:00:00') AS editable_until
 FROM customer_assignments ca
 JOIN daily_routes dr ON dr.daily_route_id = ca.daily_route_id
-WHERE dr.route_date = @target_date
+WHERE dr.route_date IN ('2026-10-28', '2026-10-26')
   AND NOT EXISTS (
       SELECT 1 FROM deliveries d
-      WHERE d.assignment_id = ca.assignment_id AND d.delivery_date = @target_date
+      WHERE d.assignment_id = ca.assignment_id AND d.delivery_date = dr.route_date
   );
 
 -- ----------------------------------------------------------------------------
--- 13. DELIVERY ITEMS FOR 2026-10-26 (Crucial for Supplier Delivery Operations)
+-- 13. DELIVERY ITEMS FOR TARGET DATES (Crucial for Supplier Delivery Operations)
 -- ----------------------------------------------------------------------------
 INSERT INTO delivery_items (delivery_id, subscription_id, newspaper_id, status, reason_id, remarks)
 SELECT d.delivery_id,
@@ -449,48 +454,28 @@ SELECT d.delivery_id,
 FROM deliveries d
 JOIN customer_assignments ca ON ca.assignment_id = d.assignment_id
 JOIN subscriptions s ON s.customer_id = d.customer_id AND s.status = 'ACTIVE'
-WHERE d.delivery_date = @target_date
+WHERE d.delivery_date IN ('2026-10-28', '2026-10-26')
   AND NOT EXISTS (
       SELECT 1 FROM delivery_items di
       WHERE di.delivery_id = d.delivery_id AND di.subscription_id = s.subscription_id
   );
 
 -- ----------------------------------------------------------------------------
--- 14. DELIVERY CONFIRMATIONS & COMPLAINTS FOR 2026-10-26
+-- 14. DELIVERY CONFIRMATIONS FOR TARGET DATES
 -- ----------------------------------------------------------------------------
 INSERT INTO delivery_confirmations (delivery_id, customer_id, status, confirmed_at)
 SELECT d.delivery_id,
        d.customer_id,
        CASE WHEN d.status = 'DELIVERED' THEN 'CONFIRMED' ELSE 'PENDING' END,
-       CASE WHEN d.status = 'DELIVERED' THEN TIMESTAMP(@target_date, '08:30:00') ELSE NULL END
+       CASE WHEN d.status = 'DELIVERED' THEN TIMESTAMP(d.delivery_date, '08:30:00') ELSE NULL END
 FROM deliveries d
-WHERE d.delivery_date = @target_date
+WHERE d.delivery_date IN ('2026-10-28', '2026-10-26')
   AND NOT EXISTS (
       SELECT 1 FROM delivery_confirmations dc WHERE dc.delivery_id = d.delivery_id
   );
 
-INSERT INTO delivery_complaints (delivery_id, delivery_item_id, customer_id, complaint_type, description, status, assigned_partner_id, resolution, resolved_at)
-SELECT d.delivery_id,
-       di.delivery_item_id,
-       d.customer_id,
-       'MISSED_DELIVERY',
-       'Demo complaint: customer reported missing paper on route.',
-       'IN_PROGRESS',
-       d.partner_id,
-       'Investigating route drop; partner re-check scheduled.',
-       NULL
-FROM deliveries d
-JOIN delivery_items di ON di.delivery_id = d.delivery_id
-WHERE d.delivery_date = @target_date
-  AND d.status = 'NOT_DELIVERED'
-  AND MOD(d.delivery_id, 3) = 0
-  AND NOT EXISTS (
-      SELECT 1 FROM delivery_complaints dc
-      WHERE dc.delivery_id = d.delivery_id AND dc.complaint_type = 'MISSED_DELIVERY'
-  );
-
 -- ----------------------------------------------------------------------------
--- 15. NOTIFICATIONS & CUSTOMER SERVICE REQUESTS
+-- 15. CUSTOMER NOTIFICATIONS
 -- ----------------------------------------------------------------------------
 INSERT INTO notifications (user_id, notification_type, title, message, reference_type, reference_id, is_read, created_at)
 SELECT u.user_id,
@@ -500,48 +485,15 @@ SELECT u.user_id,
        'DELIVERY',
        d.delivery_id,
        FALSE,
-       TIMESTAMP(@target_date, '07:15:00')
+       TIMESTAMP(d.delivery_date, '07:15:00')
 FROM deliveries d
 JOIN customers c ON c.customer_id = d.customer_id
 JOIN users u ON u.user_id = c.user_id
-WHERE d.delivery_date = @target_date AND d.status = 'DELIVERED' AND MOD(c.customer_id, 10) = 0
+WHERE d.delivery_date IN ('2026-10-28', '2026-10-26')
+  AND d.status = 'DELIVERED'
+  AND MOD(c.customer_id, 10) = 0
   AND NOT EXISTS (
       SELECT 1 FROM notifications n WHERE n.user_id = u.user_id AND n.reference_id = d.delivery_id
   );
-
-INSERT INTO customer_requests (customer_id, request_type, reference_id, description, status, created_at)
-SELECT c.customer_id,
-       v.req_type,
-       NULL,
-       v.descr,
-       'PENDING',
-       TIMESTAMP(@target_date, '08:00:00')
-FROM (
-    SELECT 10 cust_idx, 'CHANGE_DELIVERY_TIME' req_type, 'Please adjust weekday delivery to 07:15 AM.' descr UNION ALL
-    SELECT 50, 'VACATION_PAUSE', 'Please pause delivery from 28 October to 2 November.' UNION ALL
-    SELECT 120, 'ADDRESS_UPDATE', 'Moved to next apartment; updating flat number.' UNION ALL
-    SELECT 220, 'CHANGE_DELIVERY_TIME', 'Please deliver after 07:00 AM on weekends.'
-) v
-JOIN customers c ON c.customer_id = v.cust_idx
-WHERE NOT EXISTS (
-    SELECT 1 FROM customer_requests cr
-    WHERE cr.customer_id = c.customer_id AND cr.request_type = v.req_type
-);
-
--- ----------------------------------------------------------------------------
--- 16. DATA INTEGRITY SANITY CHECK (Report counts)
--- ----------------------------------------------------------------------------
-SELECT 'suppliers' entity, COUNT(*) AS count FROM suppliers
-UNION ALL SELECT 'delivery_partners', COUNT(*) FROM delivery_partners
-UNION ALL SELECT 'customers', COUNT(*) FROM customers
-UNION ALL SELECT 'customer_addresses', COUNT(*) FROM customer_addresses
-UNION ALL SELECT 'subscriptions', COUNT(*) FROM subscriptions
-UNION ALL SELECT 'routes', COUNT(*) FROM routes
-UNION ALL SELECT 'daily_routes (2026-10-26)', COUNT(*) FROM daily_routes WHERE route_date = @target_date
-UNION ALL SELECT 'customer_assignments (2026-10-26)', COUNT(*) FROM customer_assignments ca JOIN daily_routes dr ON dr.daily_route_id = ca.daily_route_id WHERE dr.route_date = @target_date
-UNION ALL SELECT 'deliveries (2026-10-26)', COUNT(*) FROM deliveries WHERE delivery_date = @target_date
-UNION ALL SELECT 'delivery_items (2026-10-26)', COUNT(*) FROM delivery_items di JOIN deliveries d ON d.delivery_id = di.delivery_id WHERE d.delivery_date = @target_date
-UNION ALL SELECT 'delivery_confirmations', COUNT(*) FROM delivery_confirmations
-UNION ALL SELECT 'notifications', COUNT(*) FROM notifications;
 
 COMMIT;

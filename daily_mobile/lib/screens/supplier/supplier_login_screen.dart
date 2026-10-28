@@ -166,17 +166,7 @@ class _SupplierLoginScreenState extends State<SupplierLoginScreen> {
                           label: _loading ? 'SIGNING IN...' : 'LOGIN',
                           onPressed: _loading ? () {} : _login,
                         ),
-                        const SizedBox(height: 18),
-                        const Center(
-                          child: Text(
-                            'Supplier authentication uses the existing DAILY backend login endpoint.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: DailyColors.gray,
-                            ),
-                          ),
-                        ),
+                        const SizedBox(height: 18)
                       ],
                     ),
                   ),
