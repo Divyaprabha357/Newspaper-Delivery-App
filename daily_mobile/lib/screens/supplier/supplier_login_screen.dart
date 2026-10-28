@@ -5,6 +5,7 @@ import '../../services/role_session_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'supplier_app_shell.dart';
+import 'supplier_signup_screen.dart';
 import '../role_selection_screen.dart';
 
 class SupplierLoginScreen extends StatefulWidget {
@@ -165,6 +166,41 @@ class _SupplierLoginScreenState extends State<SupplierLoginScreen> {
                         PrimaryButton(
                           label: _loading ? 'SIGNING IN...' : 'LOGIN',
                           onPressed: _loading ? () {} : _login,
+                        ),
+                        const SizedBox(height: 22),
+                        Center(
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              const Text(
+                                "Don't have an account? ",
+                                style: TextStyle(
+                                  color: DailyColors.charcoal,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const SupplierSignUpScreen(),
+                                    ),
+                                  );
+                                },
+                                child: const Text(
+                                  'Sign Up',
+                                  style: TextStyle(
+                                    color: DailyColors.burgundy,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(height: 18)
                       ],

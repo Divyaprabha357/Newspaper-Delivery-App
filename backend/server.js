@@ -436,6 +436,190 @@ app.post("/api/partner/register", async (req, res) => {
 
 
 // =========================================
+// AREAS LISTING
+// =========================================
+
+app.get("/api/areas", (req, res) => {
+    db.query("SELECT area_id, area_name, city, pincode FROM areas WHERE status = 'ACTIVE' ORDER BY area_name", (err, rows) => {
+        if (err) return res.status(500).json({ success: false, message: "Failed to load service areas" });
+        res.json({ success: true, areas: rows || [] });
+    });
+});
+
+
+// =========================================
+// SUPPLIER REGISTRATION
+// =========================================
+
+app.post(["/api/supplier/register", "/api/supplier/signup"], async (req, res) => {
+    try {
+        const {
+            supplier_name,
+            supplierName,
+            business_name,
+            businessName,
+            name,
+            fullName,
+            contact_name,
+            contactName,
+            email,
+            business_email,
+            phone,
+            phoneNumber,
+            contact_number,
+            address,
+            business_address,
+            password,
+            service_areas,
+            serviceAreas,
+            area_ids,
+            areaIds,
+            area_names,
+            areaNames
+        } = req.body;
+
+        const resolvedSupplierName = (supplier_name || supplierName || business_name || businessName || "").trim();
+        const resolvedContactName = (name || fullName || contact_name || contactName || "").trim();
+        const rawEmail = (email || business_email || "").trim();
+        const rawPhone = (phone || phoneNumber || contact_number || "").trim();
+        const resolvedAddress = (address || business_address || "").trim();
+
+        if (!resolvedSupplierName) {
+            return res.status(400).json({ success: false, message: "Supplier or business name is required" });
+        }
+        if (!resolvedContactName) {
+            return res.status(400).json({ success: false, message: "Contact person's full name is required" });
+        }
+        if (!rawEmail) {
+            return res.status(400).json({ success: false, message: "Business email is required" });
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawEmail)) {
+            return res.status(400).json({ success: false, message: "Please enter a valid email address" });
+        }
+        if (!rawPhone) {
+            return res.status(400).json({ success: false, message: "Phone number is required" });
+        }
+        const cleanPhone = rawPhone.replace(/[^\d+]/g, "");
+        if (cleanPhone.length < 10) {
+            return res.status(400).json({ success: false, message: "Phone number must be at least 10 digits" });
+        }
+        if (!resolvedAddress) {
+            return res.status(400).json({ success: false, message: "Business address is required" });
+        }
+        if (!password) {
+            return res.status(400).json({ success: false, message: "Password is required" });
+        }
+        if (password.length < 6) {
+            return res.status(400).json({ success: false, message: "Password must be at least 6 characters long" });
+        }
+
+        const normalizedEmail = rawEmail.toLowerCase();
+
+        // Check for duplicate email or phone
+        const [existing] = await db.promise().query(
+            "SELECT user_id, email, phone FROM users WHERE LOWER(email) = ? OR phone = ? LIMIT 1",
+            [normalizedEmail, cleanPhone]
+        );
+
+        if (existing && existing.length > 0) {
+            const isEmail = existing[0].email && existing[0].email.toLowerCase() === normalizedEmail;
+            return res.status(409).json({
+                success: false,
+                message: isEmail
+                    ? "An account with this email address already exists"
+                    : "An account with this phone number already exists"
+            });
+        }
+
+        // Start transaction
+        await db.promise().query("START TRANSACTION");
+        try {
+            const passwordHash = hashPassword(password);
+
+            // 1. Insert into users table
+            const [userResult] = await db.promise().query(
+                `INSERT INTO users (name, email, phone, password_hash, role, status, auth_provider)
+                 VALUES (?, ?, ?, ?, 'SUPPLIER', 'ACTIVE', 'PASSWORD')`,
+                [resolvedContactName, normalizedEmail, cleanPhone, passwordHash]
+            );
+            const userId = userResult.insertId;
+
+            // 2. Insert into suppliers table
+            const [supplierResult] = await db.promise().query(
+                `INSERT INTO suppliers (user_id, supplier_name, contact_number, address, status)
+                 VALUES (?, ?, ?, ?, 'ACTIVE')`,
+                [userId, resolvedSupplierName, cleanPhone, resolvedAddress]
+            );
+            const supplierId = supplierResult.insertId;
+
+            // 3. Link service areas in supplier_areas
+            const targetAreaIds = new Set();
+            const rawAreaIds = area_ids || areaIds || [];
+            if (Array.isArray(rawAreaIds)) {
+                for (const id of rawAreaIds) {
+                    const num = Number(id);
+                    if (Number.isInteger(num) && num > 0) targetAreaIds.add(num);
+                }
+            }
+            const rawAreaNames = area_names || areaNames || service_areas || serviceAreas || [];
+            const namesList = Array.isArray(rawAreaNames)
+                ? rawAreaNames
+                : (typeof rawAreaNames === "string" ? rawAreaNames.split(",").map(s => s.trim()).filter(Boolean) : []);
+
+            if (namesList.length > 0) {
+                const [matchedAreas] = await db.promise().query(
+                    "SELECT area_id FROM areas WHERE area_name IN (?)",
+                    [namesList]
+                );
+                if (matchedAreas && matchedAreas.length > 0) {
+                    for (const a of matchedAreas) {
+                        targetAreaIds.add(a.area_id);
+                    }
+                }
+            }
+
+            for (const areaId of targetAreaIds) {
+                await db.promise().query(
+                    `INSERT IGNORE INTO supplier_areas (supplier_id, area_id, status)
+                     VALUES (?, ?, 'ACTIVE')`,
+                    [supplierId, areaId]
+                );
+            }
+
+            await db.promise().query("COMMIT");
+
+            return res.status(201).json({
+                success: true,
+                message: "Supplier account created successfully",
+                user: {
+                    user_id: userId,
+                    supplier_id: supplierId,
+                    supplier_name: resolvedSupplierName,
+                    name: resolvedContactName,
+                    email: normalizedEmail,
+                    phone: cleanPhone,
+                    role: "SUPPLIER"
+                }
+            });
+        } catch (txErr) {
+            await db.promise().query("ROLLBACK");
+            console.error("Supplier registration transaction error:", txErr);
+            return res.status(500).json({
+                success: false,
+                message: "Failed to create supplier account. Please try again."
+            });
+        }
+    } catch (err) {
+        console.error("Supplier registration server error:", err);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error during supplier registration"
+        });
+    }
+});
+
+
+// =========================================
 // LOGIN
 // =========================================
 

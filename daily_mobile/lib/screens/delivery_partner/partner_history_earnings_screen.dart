@@ -270,6 +270,9 @@ class _PartnerEarningsScreenState extends State<PartnerEarningsScreen> {
         children: [
           PartnerTop(
             'My earnings',
+            subtitle: payments.isEmpty
+                ? '$completedDeliveries completed ${completedDeliveries == 1 ? 'delivery' : 'deliveries'} (₹${ratePerDelivery.toInt()}/delivery)'
+                : '$completedDeliveries completed ${completedDeliveries == 1 ? 'delivery' : 'deliveries'} • ${payments.length} payment ${payments.length == 1 ? 'record' : 'records'}',
           ),
           const PartnerSection('CALCULATED EARNINGS'),
           Padding(

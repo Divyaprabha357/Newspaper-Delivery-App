@@ -105,6 +105,24 @@ server.listen(0, async () => {
         assert(delivRes.data.success === true, 'Deliveries success is true');
         assert(Array.isArray(delivRes.data.deliveries), 'Deliveries list is an array');
 
+        console.log('\n--- Test 8: GET /api/supplier/routes for Supplier 1 ---');
+        const routesRes = await request('/api/supplier/routes?user_id=5&supplier_id=1');
+        assert(routesRes.status === 200, `Routes status is 200 (got ${routesRes.status})`);
+        assert(routesRes.data.success === true, 'Routes success is true');
+        assert(Array.isArray(routesRes.data.routes), 'Routes is an array');
+        assert(routesRes.data.routes.length >= 1, `Returned at least 1 route (got ${routesRes.data.routes.length})`);
+
+        console.log('\n--- Test 9: GET /api/supplier/partners for Supplier 1 ---');
+        const partnersRes = await request('/api/supplier/partners?user_id=5&supplier_id=1');
+        assert(partnersRes.status === 200, `Partners status is 200 (got ${partnersRes.status})`);
+        assert(partnersRes.data.success === true, 'Partners success is true');
+        assert(Array.isArray(partnersRes.data.partners), 'Partners is an array');
+        assert(partnersRes.data.partners.length >= 1, `Returned at least 1 partner (got ${partnersRes.data.partners.length})`);
+        const firstPartner = partnersRes.data.partners[0];
+        assert(firstPartner.partner_name != null, 'Partner has partner_name');
+        assert(firstPartner.partner_status != null, 'Partner has partner_status');
+        assert(typeof firstPartner.delivery_count === 'number', 'Partner has numeric delivery_count');
+
         console.log(`\n========================================`);
         console.log(`Tests finished: ${testsPassed} passed, ${testsFailed} failed`);
         console.log(`========================================\n`);

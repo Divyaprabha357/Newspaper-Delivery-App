@@ -81,6 +81,33 @@ class RoleApiService {
         },
       );
 
+  Future<Map<String, dynamic>> registerSupplier({
+    required String supplierName,
+    required String name,
+    required String email,
+    required String phone,
+    required String address,
+    required String password,
+    List<int>? areaIds,
+    List<String>? areaNames,
+  }) =>
+      _request(
+        '/supplier/register',
+        method: 'POST',
+        body: {
+          'supplier_name': supplierName,
+          'name': name,
+          'email': email,
+          'phone': phone,
+          'address': address,
+          'password': password,
+          if (areaIds != null && areaIds.isNotEmpty) 'area_ids': areaIds,
+          if (areaNames != null && areaNames.isNotEmpty) 'area_names': areaNames,
+        },
+      );
+
+  Future<Map<String, dynamic>> getAreas() => _request('/areas');
+
   Future<Map<String, dynamic>> supplierProfile(int userId) =>
       _get('/supplier/profile', userId);
 

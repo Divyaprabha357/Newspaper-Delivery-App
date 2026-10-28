@@ -13,6 +13,9 @@ const db = mysql.createConnection({
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     port: Number(process.env.DB_PORT),
+    connectTimeout: 30000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000,
     ssl: {
         ca: caCert,
         rejectUnauthorized: true

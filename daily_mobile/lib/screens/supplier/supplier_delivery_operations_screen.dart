@@ -86,48 +86,64 @@ class _SupplierDeliveryOperationsScreenState
       final effectiveSupplierId = supplierId;
       final effectiveUserId = userId ?? supplierId!;
 
-      final responses = await Future.wait([
-        api.supplierRoutes(
-          effectiveUserId,
-          supplierId: effectiveSupplierId,
-          date: dateStr,
-        ),
-        api.supplierPartners(
-          effectiveUserId,
-          supplierId: effectiveSupplierId,
-          date: dateStr,
-        ),
-        api.supplierDeliveries(
-          effectiveUserId,
-          supplierId: effectiveSupplierId,
-          date: dateStr,
-        ),
-      ]);
+      final deliveriesResp = await api
+          .supplierDeliveries(
+            effectiveUserId,
+            supplierId: effectiveSupplierId,
+            date: dateStr,
+          )
+          .catchError((_) => <String, dynamic>{});
 
-      final routesList = responses[0]['routes'];
-      final partnersList = responses[1]['partners'];
-      final deliveriesList = responses[2]['deliveries'];
+      final routesResp = await api
+          .supplierRoutes(
+            effectiveUserId,
+            supplierId: effectiveSupplierId,
+            date: dateStr,
+          )
+          .catchError((_) => <String, dynamic>{});
+
+      final partnersResp = await api
+          .supplierPartners(
+            effectiveUserId,
+            supplierId: effectiveSupplierId,
+            date: dateStr,
+          )
+          .catchError((_) => <String, dynamic>{});
+
+      final rawDeliveries = deliveriesResp['deliveries'];
+      final rawRoutes = routesResp['routes'];
+      final rawPartners = partnersResp['partners'];
+
+      if (rawDeliveries == null && rawRoutes == null && rawPartners == null) {
+        throw const RoleApiException('The server returned no delivery operations data.');
+      }
+
+      final deliveriesList = (rawDeliveries is List)
+          ? rawDeliveries
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : <Map<String, dynamic>>[];
+
+      final routesList = (rawRoutes is List && rawRoutes.isNotEmpty)
+          ? rawRoutes
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : deliveriesList;
+
+      final partnersList = (rawPartners is List && rawPartners.isNotEmpty)
+          ? rawPartners
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : deliveriesList;
 
       if (mounted) {
         setState(() {
-          _routes = (routesList is List)
-              ? routesList
-                  .whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList()
-              : [];
-          _partners = (partnersList is List)
-              ? partnersList
-                  .whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList()
-              : [];
-          _deliveries = (deliveriesList is List)
-              ? deliveriesList
-                  .whereType<Map>()
-                  .map((e) => Map<String, dynamic>.from(e))
-                  .toList()
-              : [];
+          _deliveries = deliveriesList;
+          _routes = routesList;
+          _partners = partnersList;
         });
       }
     } on RoleApiException catch (e) {
@@ -271,17 +287,17 @@ class _SupplierDeliveryOperationsScreenState
           ...records.map((record) {
             final values = _tab == 0
                 ? [
-                    _formatDate(record['route_date'] ?? _dateParam()),
+                    _formatDate(record['route_date'] ?? record['delivery_date'] ?? _dateParam()),
                     record['area_name'] ?? record['route_name'],
                     record['partner_name'] ?? 'Unassigned',
-                    record['daily_route_status'] ?? record['route_status'] ?? 'ACTIVE',
+                    record['daily_route_status'] ?? record['delivery_status'] ?? record['route_status'] ?? 'ACTIVE',
                   ]
                 : _tab == 1
                 ? [
                     record['partner_name'] ?? record['partner_code'],
                     record['area_name'],
-                    (record['delivery_count'] ?? 0).toString(),
-                    record['partner_status'] ?? 'AVAILABLE',
+                    (record['delivery_count'] ?? record['delivery_id'] ?? 0).toString(),
+                    record['partner_status'] ?? record['delivery_status'] ?? 'AVAILABLE',
                   ]
                 : [
                     record['customer_name'],
