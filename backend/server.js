@@ -1757,6 +1757,87 @@ app.get("/api/supplier/distribution", (req, res) => {
     });
 });
 
+app.get("/api/supplier/routes", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        const date = req.query.date || null;
+        const sql = `
+            SELECT r.route_id, r.route_name, r.status AS route_status,
+                   a.area_id, a.area_name, a.city, a.pincode,
+                   dr.daily_route_id, dr.route_date, dr.status AS daily_route_status,
+                   dp.partner_id, pu.name AS partner_name,
+                   COUNT(DISTINCT ca.assignment_id) AS assignment_count
+            FROM routes r
+            JOIN areas a ON a.area_id = r.area_id
+            JOIN supplier_areas sa ON sa.area_id = a.area_id
+            LEFT JOIN daily_routes dr ON dr.route_id = r.route_id
+                AND (? IS NULL OR ? = '' OR dr.route_date = ?)
+            LEFT JOIN route_partners rp ON rp.daily_route_id = dr.daily_route_id
+            LEFT JOIN delivery_partners dp ON dp.partner_id = rp.partner_id
+            LEFT JOIN users pu ON pu.user_id = dp.user_id
+            LEFT JOIN customer_assignments ca ON ca.daily_route_id = dr.daily_route_id
+            WHERE sa.supplier_id = ?
+            GROUP BY r.route_id, r.route_name, r.status, a.area_id, a.area_name, a.city, a.pincode,
+                     dr.daily_route_id, dr.route_date, dr.status, dp.partner_id, pu.name
+            ORDER BY r.route_name`;
+
+        db.query(sql, [date, date, date, identity.supplier_id], (err, rows) => {
+            if (err) {
+                console.error("Error loading supplier routes:", err);
+                return res.status(500).json({ success: false, message: "Failed to load supplier routes" });
+            }
+            res.json({ success: true, routes: rows || [] });
+        });
+    });
+});
+
+app.get("/api/supplier/partners", (req, res) => {
+    withRole(req, res, "SUPPLIER", (identity) => {
+        const date = req.query.date || null;
+        const sql = `
+            SELECT dp.partner_id, dp.partner_code, dp.status AS partner_status,
+                   dp.shift_start, dp.shift_end, dp.recommended_customer_limit,
+                   pu.user_id, pu.name AS partner_name, pu.email AS partner_email, pu.phone AS partner_phone,
+                   COALESCE(
+                       (SELECT a.area_name
+                        FROM routes r
+                        JOIN areas a ON a.area_id = r.area_id
+                        JOIN route_partners rp ON rp.partner_id = dp.partner_id
+                        JOIN daily_routes dr ON dr.daily_route_id = rp.daily_route_id
+                        WHERE (? IS NULL OR ? = '' OR dr.route_date = ?)
+                        LIMIT 1),
+                       (SELECT a.area_name
+                        FROM routes r
+                        JOIN areas a ON a.area_id = r.area_id
+                        JOIN supplier_areas sa ON sa.area_id = a.area_id
+                        WHERE sa.supplier_id = ?
+                        LIMIT 1),
+                       'Central Mumbai'
+                   ) AS area_name,
+                   COALESCE(
+                       (SELECT COUNT(*)
+                        FROM deliveries d
+                        JOIN delivery_items di ON di.delivery_id = d.delivery_id
+                        JOIN subscriptions s ON s.subscription_id = di.subscription_id
+                        WHERE d.partner_id = dp.partner_id
+                          AND s.supplier_id = ?
+                          AND (? IS NULL OR ? = '' OR DATE(d.delivery_date) = DATE(?))),
+                       0
+                   ) AS delivery_count
+            FROM delivery_partners dp
+            JOIN users pu ON pu.user_id = dp.user_id
+            WHERE pu.status = 'ACTIVE'
+            ORDER BY dp.partner_id`;
+
+        db.query(sql, [date, date, date, identity.supplier_id, identity.supplier_id, date, date, date], (err, rows) => {
+            if (err) {
+                console.error("Error loading supplier delivery partners:", err);
+                return res.status(500).json({ success: false, message: "Failed to load delivery partners" });
+            }
+            res.json({ success: true, partners: rows || [] });
+        });
+    });
+});
+
 app.get("/api/supplier/deliveries", (req, res) => {
     withRole(req, res, "SUPPLIER", (identity) => {
         const date = req.query.date || null;
@@ -1766,7 +1847,8 @@ app.get("/api/supplier/deliveries", (req, res) => {
                    di.delivery_item_id, di.status AS item_status, di.remarks AS item_remarks,
                    n.newspaper_id, n.newspaper_name, n.language,
                    u.name AS customer_name, ca.address_line, ca.city, ca.pincode,
-                   a.area_name, dp.partner_id, pu.name AS partner_name
+                   a.area_name, dp.partner_id, pu.name AS partner_name,
+                   r.route_name
             FROM deliveries d
             JOIN delivery_items di ON di.delivery_id = d.delivery_id
             JOIN subscriptions s ON s.subscription_id = di.subscription_id
@@ -1776,6 +1858,8 @@ app.get("/api/supplier/deliveries", (req, res) => {
             LEFT JOIN customer_assignments caa ON caa.assignment_id = d.assignment_id
             LEFT JOIN customer_addresses ca ON ca.address_id = COALESCE(caa.address_id, s.address_id)
             LEFT JOIN areas a ON a.area_id = ca.area_id
+            LEFT JOIN daily_routes dr ON dr.daily_route_id = caa.daily_route_id
+            LEFT JOIN routes r ON r.route_id = dr.route_id
             LEFT JOIN delivery_partners dp ON dp.partner_id = d.partner_id
             LEFT JOIN users pu ON pu.user_id = dp.user_id
             WHERE s.supplier_id = ?

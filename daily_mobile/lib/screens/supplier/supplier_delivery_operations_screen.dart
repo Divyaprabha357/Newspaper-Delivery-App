@@ -15,7 +15,9 @@ class _SupplierDeliveryOperationsScreenState
     extends State<SupplierDeliveryOperationsScreen> {
   int _tab = 0;
   DateTime _date = DateTime.now();
-  List<Map<String, dynamic>> _records = [];
+  List<Map<String, dynamic>> _routes = [];
+  List<Map<String, dynamic>> _partners = [];
+  List<Map<String, dynamic>> _deliveries = [];
   bool _loading = true;
   String? _error;
 
@@ -29,6 +31,42 @@ class _SupplierDeliveryOperationsScreenState
       '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
   int? _number(dynamic value) => int.tryParse(value?.toString() ?? '');
 
+  List<Map<String, dynamic>> get _currentRecords {
+    switch (_tab) {
+      case 0:
+        return _routes;
+      case 1:
+        return _partners;
+      case 2:
+      default:
+        return _deliveries;
+    }
+  }
+
+  String get _emptyMessage {
+    switch (_tab) {
+      case 0:
+        return 'No routes configured for this supplier.';
+      case 1:
+        return 'No delivery partners registered.';
+      case 2:
+      default:
+        return 'No deliveries found for this date.';
+    }
+  }
+
+  IconData get _emptyIcon {
+    switch (_tab) {
+      case 0:
+        return Icons.alt_route;
+      case 1:
+        return Icons.people_outline;
+      case 2:
+      default:
+        return Icons.local_shipping_outlined;
+    }
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -41,30 +79,62 @@ class _SupplierDeliveryOperationsScreenState
       if (userId == null && supplierId == null) {
         throw const RoleApiException('Supplier session is unavailable.');
       }
-      final response = await RoleApiService(
+      final api = RoleApiService(
         authToken: session?['session_token']?.toString(),
-      ).supplierDeliveries(
-        userId ?? supplierId!,
-        supplierId: supplierId,
-        date: _dateParam(),
       );
-      final values = response['deliveries'];
-      if (values is! List) {
-        throw const RoleApiException('The server returned no delivery list.');
-      }
+      final dateStr = _dateParam();
+      final effectiveSupplierId = supplierId;
+      final effectiveUserId = userId ?? supplierId!;
+
+      final responses = await Future.wait([
+        api.supplierRoutes(
+          effectiveUserId,
+          supplierId: effectiveSupplierId,
+          date: dateStr,
+        ),
+        api.supplierPartners(
+          effectiveUserId,
+          supplierId: effectiveSupplierId,
+          date: dateStr,
+        ),
+        api.supplierDeliveries(
+          effectiveUserId,
+          supplierId: effectiveSupplierId,
+          date: dateStr,
+        ),
+      ]);
+
+      final routesList = responses[0]['routes'];
+      final partnersList = responses[1]['partners'];
+      final deliveriesList = responses[2]['deliveries'];
+
       if (mounted) {
-        setState(
-          () => _records = values
-              .whereType<Map>()
-              .map((e) => Map<String, dynamic>.from(e))
-              .toList(),
-        );
+        setState(() {
+          _routes = (routesList is List)
+              ? routesList
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : [];
+          _partners = (partnersList is List)
+              ? partnersList
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : [];
+          _deliveries = (deliveriesList is List)
+              ? deliveriesList
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList()
+              : [];
+        });
       }
     } on RoleApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
       if (mounted) {
-        setState(() => _error = 'Unable to load deliveries right now.');
+        setState(() => _error = 'Unable to load delivery operations right now.');
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -132,7 +202,7 @@ class _SupplierDeliveryOperationsScreenState
           child: _loading
               ? const _StateMessage(
                   icon: Icons.hourglass_empty,
-                  text: 'Loading deliveries...',
+                  text: 'Loading delivery operations...',
                 )
               : _error != null
               ? _StateMessage(
@@ -140,10 +210,10 @@ class _SupplierDeliveryOperationsScreenState
                   text: _error!,
                   retry: _load,
                 )
-              : _records.isEmpty
-              ? const _StateMessage(
-                  icon: Icons.local_shipping_outlined,
-                  text: 'No deliveries found for this date.',
+              : _currentRecords.isEmpty
+              ? _StateMessage(
+                  icon: _emptyIcon,
+                  text: _emptyMessage,
                 )
               : _table(),
         ),
@@ -185,6 +255,7 @@ class _SupplierDeliveryOperationsScreenState
         : _tab == 1
         ? ['PARTNER', 'AREA', 'DELIVERIES', 'STATUS']
         : ['CUSTOMER', 'NEWSPAPER', 'PARTNER', 'STATUS'];
+    final records = _currentRecords;
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -197,26 +268,26 @@ class _SupplierDeliveryOperationsScreenState
         ),
         children: [
           TableRow(children: headers.map((h) => _Header(h)).toList()),
-          ..._records.map((record) {
+          ...records.map((record) {
             final values = _tab == 0
                 ? [
-                    _formatDate(record['delivery_date']),
-                    record['area_name'],
-                    record['partner_name'],
-                    record['delivery_status'],
+                    _formatDate(record['route_date'] ?? _dateParam()),
+                    record['area_name'] ?? record['route_name'],
+                    record['partner_name'] ?? 'Unassigned',
+                    record['daily_route_status'] ?? record['route_status'] ?? 'ACTIVE',
                   ]
                 : _tab == 1
                 ? [
-                    record['partner_name'],
+                    record['partner_name'] ?? record['partner_code'],
                     record['area_name'],
-                    record['delivery_id'],
-                    record['delivery_status'],
+                    (record['delivery_count'] ?? 0).toString(),
+                    record['partner_status'] ?? 'AVAILABLE',
                   ]
                 : [
                     record['customer_name'],
                     record['newspaper_name'],
-                    record['partner_name'],
-                    record['item_status'] ?? record['delivery_status'],
+                    record['partner_name'] ?? 'Unassigned',
+                    record['item_status'] ?? record['delivery_status'] ?? 'PENDING',
                   ];
             return TableRow(
               children: values

@@ -97,6 +97,20 @@ class RoleApiService {
   }) =>
       _get('/supplier/distribution', userId, supplierId: supplierId, date: date);
 
+  Future<Map<String, dynamic>> supplierRoutes(
+    int userId, {
+    int? supplierId,
+    String? date,
+  }) =>
+      _get('/supplier/routes', userId, supplierId: supplierId, date: date);
+
+  Future<Map<String, dynamic>> supplierPartners(
+    int userId, {
+    int? supplierId,
+    String? date,
+  }) =>
+      _get('/supplier/partners', userId, supplierId: supplierId, date: date);
+
   Future<Map<String, dynamic>> supplierDeliveries(
     int userId, {
     int? supplierId,
