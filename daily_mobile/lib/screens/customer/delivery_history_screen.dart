@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../theme/app_text_styles.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import '../../services/customer_api_service.dart';
@@ -35,7 +36,12 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
   Future<void> _load() async {
     final id = await SessionService.getCustomerId();
     if (id == null) {
-      if (mounted) setState(() { loading = false; error = 'Your session has expired.'; });
+      if (mounted) {
+        setState(() {
+          loading = false;
+          error = 'Your session has expired.';
+        });
+      }
       return;
     }
     try {
@@ -47,14 +53,21 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
         });
       }
     } on CustomerApiException catch (e) {
-      if (mounted) setState(() { loading = false; error = e.message; });
+      if (mounted) {
+        setState(() {
+          loading = false;
+          error = e.message;
+        });
+      }
     }
   }
 
   List<dynamic> get _filteredItems {
     return items.where((raw) {
       final row = Map<String, dynamic>.from(raw as Map);
-      final status = (row['item_status'] ?? row['delivery_status'] ?? 'UNKNOWN').toString().toUpperCase();
+      final status = (row['item_status'] ?? row['delivery_status'] ?? 'UNKNOWN')
+          .toString()
+          .toUpperCase();
       final paper = (row['newspaper_name'] ?? '').toString().toLowerCase();
       final date = (row['delivery_date'] ?? '').toString().toLowerCase();
 
@@ -65,7 +78,10 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
       } else if (_selectedFilter == 'DELAYED') {
         matchesCategory = status.contains('DELAY');
       } else if (_selectedFilter == 'MISSED') {
-        matchesCategory = status.contains('NOT') || status.contains('MISSED') || status.contains('FAIL');
+        matchesCategory =
+            status.contains('NOT') ||
+            status.contains('MISSED') ||
+            status.contains('FAIL');
       }
 
       if (!matchesCategory) return false;
@@ -73,7 +89,9 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
       // Filter by search query
       final query = _searchController.text.trim().toLowerCase();
       if (query.isNotEmpty) {
-        return paper.contains(query) || date.contains(query) || status.toLowerCase().contains(query);
+        return paper.contains(query) ||
+            date.contains(query) ||
+            status.toLowerCase().contains(query);
       }
 
       return true;
@@ -95,7 +113,10 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
                 title: 'Delivery History',
                 onBack: () => Navigator.pop(context),
                 trailing: IconButton(
-                  icon: Icon(_showSearch ? Icons.close : Icons.search, size: 20),
+                  icon: Icon(
+                    _showSearch ? Icons.close : Icons.search,
+                    size: 20,
+                  ),
                   onPressed: () {
                     setState(() {
                       _showSearch = !_showSearch;
@@ -114,17 +135,28 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
                     hintText: 'Search newspaper, date, status...',
-                    hintStyle: const TextStyle(fontSize: 13, color: DailyColors.gray),
-                    prefixIcon: const Icon(Icons.search, size: 18, color: DailyColors.gray),
+                    hintStyle: const TextStyle(
+                      fontSize: 13,
+                      color: DailyColors.gray,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      size: 18,
+                      color: DailyColors.gray,
+                    ),
                     suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.clear, size: 16),
-                            onPressed: () => setState(() => _searchController.clear()),
+                            onPressed: () =>
+                                setState(() => _searchController.clear()),
                           )
                         : null,
                     filled: true,
                     fillColor: DailyColors.white,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     border: OutlineInputBorder(
                       borderSide: const BorderSide(color: DailyColors.divider),
                       borderRadius: BorderRadius.circular(0),
@@ -149,67 +181,79 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: ['ALL', 'DELIVERED', 'DELAYED', 'MISSED']
-                          .map(
-                            (x) {
-                              final isSelected = _selectedFilter == x;
-                              return Padding(
-                                padding: const EdgeInsets.only(right: 7),
-                                child: InkWell(
-                                  onTap: () => setState(() => _selectedFilter = x),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 13,
-                                      vertical: 7,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: isSelected
-                                          ? DailyColors.burgundy
-                                          : DailyColors.white,
-                                      border: Border.all(
-                                        color: isSelected ? DailyColors.burgundy : DailyColors.divider,
-                                      ),
-                                    ),
-                                    child: Text(
-                                      x,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : DailyColors.charcoal,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
+                      children: ['ALL', 'DELIVERED', 'DELAYED', 'MISSED'].map((
+                        x,
+                      ) {
+                        final isSelected = _selectedFilter == x;
+                        return Padding(
+                          padding: const EdgeInsets.only(right: 7),
+                          child: InkWell(
+                            onTap: () => setState(() => _selectedFilter = x),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 13,
+                                vertical: 7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? DailyColors.burgundy
+                                    : DailyColors.white,
+                                border: Border.all(
+                                  color: isSelected
+                                      ? DailyColors.burgundy
+                                      : DailyColors.divider,
                                 ),
-                              );
-                            },
-                          )
-                          .toList(),
+                              ),
+                              child: Text(
+                                x,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : DailyColors.charcoal,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
                     ),
                   ),
                   const SizedBox(height: 14),
                   if (loading)
                     const Padding(
                       padding: EdgeInsets.all(24),
-                      child: Center(child: CircularProgressIndicator(color: DailyColors.burgundy)),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: DailyColors.burgundy,
+                        ),
+                      ),
                     )
                   else if (error != null)
                     Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Column(children: [
-                        Text(error!, textAlign: TextAlign.center),
-                        TextButton(
-                          onPressed: () {
-                            setState(() { loading = true; error = null; });
-                            _load();
-                          },
-                          child: const Text('TRY AGAIN'),
-                        ),
-                      ]),
+                      child: Column(
+                        children: [
+                          Text(error!, textAlign: TextAlign.center),
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                loading = true;
+                                error = null;
+                              });
+                              _load();
+                            },
+                            child: const Text('TRY AGAIN'),
+                          ),
+                        ],
+                      ),
                     )
                   else if (items.isEmpty)
-                    const Padding(padding: EdgeInsets.all(20), child: Text('No delivery history yet.'))
+                    const Padding(
+                      padding: EdgeInsets.all(20),
+                      child: Text('No delivery history yet.'),
+                    )
                   else if (filtered.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(24),
@@ -220,34 +264,50 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
                       child: const Center(
                         child: Text(
                           'No deliveries match the selected filter or search.',
-                          style: TextStyle(color: DailyColors.gray, fontSize: 13),
+                          style: TextStyle(
+                            color: DailyColors.gray,
+                            fontSize: 13,
+                          ),
                         ),
                       ),
                     )
-                  else Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: DailyColors.white,
-                      border: Border.all(color: DailyColors.divider),
+                  else
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: DailyColors.white,
+                        border: Border.all(color: DailyColors.divider),
+                      ),
+                      child: Column(
+                        children: List.generate(filtered.length, (i) {
+                          final row = Map<String, dynamic>.from(
+                            filtered[i] as Map,
+                          );
+                          final status =
+                              (row['item_status'] ??
+                                      row['delivery_status'] ??
+                                      'UNKNOWN')
+                                  .toString()
+                                  .toUpperCase();
+                          final color =
+                              status.contains('DELIVER') &&
+                                  !status.contains('NOT')
+                              ? DailyColors.success
+                              : DailyColors.warning;
+                          final timeStr =
+                              row['actual_time'] ??
+                              row['scheduled_time'] ??
+                              '—';
+                          return _item(
+                            (row['delivery_date'] ?? '—').toString(),
+                            (row['newspaper_name'] ?? 'Newspaper').toString(),
+                            '$status • $timeStr',
+                            color,
+                            i == filtered.length - 1,
+                          );
+                        }),
+                      ),
                     ),
-                    child: Column(
-                      children: List.generate(filtered.length, (i) {
-                        final row = Map<String, dynamic>.from(filtered[i] as Map);
-                        final status = (row['item_status'] ?? row['delivery_status'] ?? 'UNKNOWN').toString().toUpperCase();
-                        final color = status.contains('DELIVER') && !status.contains('NOT')
-                            ? DailyColors.success
-                            : DailyColors.warning;
-                        final timeStr = row['actual_time'] ?? row['scheduled_time'] ?? '—';
-                        return _item(
-                          (row['delivery_date'] ?? '—').toString(),
-                          (row['newspaper_name'] ?? 'Newspaper').toString(),
-                          '$status • $timeStr',
-                          color,
-                          i == filtered.length - 1,
-                        );
-                      }),
-                    ),
-                  ),
                   const SizedBox(height: 14),
                   Container(
                     padding: const EdgeInsets.all(12),
@@ -255,19 +315,22 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
                       color: DailyColors.white,
                       border: Border.all(color: DailyColors.divider),
                     ),
-                    child: const Row(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.info_outline,
                           color: DailyColors.burgundy,
                           size: 17,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'STATUS GUIDE\nGreen = delivered. Orange = attention required. Missing a paper? Report it from Service Requests.',
-                            style: TextStyle(fontSize: 12, height: 1.4),
+                            style: AppTextStyles.caption.copyWith(
+                              height: 1.4,
+                              color: DailyColors.charcoal,
+                            ),
                           ),
                         ),
                       ],
@@ -311,27 +374,16 @@ class _DeliveryHistoryScreenState extends State<DeliveryHistoryScreen> {
             children: [
               Text(
                 date,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: DailyColors.gray,
-                  letterSpacing: .8,
-                ),
+                style: AppTextStyles.caption.copyWith(letterSpacing: .8),
               ),
               const SizedBox(height: 3),
-              Text(
-                paper,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(paper, style: AppTextStyles.bodyBold.copyWith(fontSize: 12)),
               const SizedBox(height: 3),
               Text(
                 status,
-                style: TextStyle(
+                style: AppTextStyles.status.copyWith(
                   fontSize: 12,
                   color: color,
-                  fontWeight: FontWeight.bold,
                 ),
               ),
             ],

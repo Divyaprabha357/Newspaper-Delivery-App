@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../theme/app_text_styles.dart';
 import '../theme/app_theme.dart';
 
 class DailyHeader extends StatelessWidget {
@@ -41,12 +42,7 @@ class DailyHeader extends StatelessWidget {
             child: Text(
               title.toUpperCase(),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-                color: DailyColors.charcoal,
-              ),
+              style: AppTextStyles.headerTitle,
             ),
           ),
           trailing ?? const SizedBox(width: 28),
@@ -148,9 +144,10 @@ class NewspaperThumb extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                style: AppTextStyles.metadata.copyWith(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
+                  color: DailyColors.charcoal,
                 ),
               ),
             ),
@@ -181,14 +178,7 @@ class PrimaryButton extends StatelessWidget {
           foregroundColor: Colors.white,
           shape: const RoundedRectangleBorder(),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            letterSpacing: .7,
-          ),
-        ),
+        child: Text(label, style: AppTextStyles.buttonSmall),
       ),
     );
   }
@@ -198,13 +188,6 @@ class SectionLabel extends StatelessWidget {
   final String text;
   const SectionLabel(this.text, {super.key});
   @override
-  Widget build(BuildContext context) => Text(
-    text.toUpperCase(),
-    style: const TextStyle(
-      fontSize: 9,
-      letterSpacing: 1.4,
-      fontWeight: FontWeight.bold,
-      color: DailyColors.gray,
-    ),
-  );
+  Widget build(BuildContext context) =>
+      Text(text.toUpperCase(), style: AppTextStyles.sectionHeader);
 }

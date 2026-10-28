@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/role_api_service.dart';
 import '../../services/role_session_service.dart';
+import '../../theme/app_text_styles.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'partner_models.dart';
@@ -11,7 +12,12 @@ class PartnerCustomerScreen extends StatefulWidget {
   final RouteCustomer customer;
   final VoidCallback onBack;
   final VoidCallback? onStatusUpdated;
-  const PartnerCustomerScreen({super.key, required this.customer, required this.onBack, this.onStatusUpdated});
+  const PartnerCustomerScreen({
+    super.key,
+    required this.customer,
+    required this.onBack,
+    this.onStatusUpdated,
+  });
 
   @override
   State<PartnerCustomerScreen> createState() => _PartnerCustomerScreenState();
@@ -32,27 +38,61 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
   @override
   Widget build(BuildContext context) {
     final children = <Widget>[
-      Text(widget.customer.name, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+      Text(widget.customer.name, style: AppTextStyles.pageTitle),
       const SizedBox(height: 8),
-      Text('${widget.customer.address}\n${widget.customer.area}', style: const TextStyle(color: DailyColors.gray, height: 1.5)),
+      Text(
+        '${widget.customer.address}\n${widget.customer.area}',
+        style: AppTextStyles.body.copyWith(
+          color: DailyColors.gray,
+          height: 1.5,
+        ),
+      ),
       const SizedBox(height: 22),
-      const Text('DELIVERY INSTRUCTIONS', style: TextStyle(fontSize: 14, letterSpacing: 1.3, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+      Text('DELIVERY INSTRUCTIONS', style: AppTextStyles.sectionHeaderAccent),
       const SizedBox(height: 8),
-      Text(widget.customer.instructions),
+      Text(widget.customer.instructions, style: AppTextStyles.body),
       const SizedBox(height: 25),
-      const Text("TODAY'S NEWSPAPERS", style: TextStyle(fontSize: 14, letterSpacing: 1.3, color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
-      ...widget.customer.newspapers.map((paper) => ListTile(contentPadding: EdgeInsets.zero, leading: Icon(delivered ? Icons.check_circle : Icons.circle_outlined, color: delivered ? DailyColors.success : DailyColors.gray), title: Text(paper), trailing: Text(widget.customer.time, style: const TextStyle(fontSize: 12, color: DailyColors.gray)))),
+      Text("TODAY'S NEWSPAPERS", style: AppTextStyles.sectionHeaderAccent),
+      ...widget.customer.newspapers.map(
+        (paper) => ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: Icon(
+            delivered ? Icons.check_circle : Icons.circle_outlined,
+            color: delivered ? DailyColors.success : DailyColors.gray,
+          ),
+          title: Text(paper, style: AppTextStyles.bodyBold),
+          trailing: Text(widget.customer.time, style: AppTextStyles.caption),
+        ),
+      ),
       const SizedBox(height: 18),
-      Text('STATUS: ${delivered ? 'DELIVERED' : (widget.customer.deliveryStatus ?? 'PENDING')}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      Text(
+        'STATUS: ${delivered ? 'DELIVERED' : (widget.customer.deliveryStatus ?? 'PENDING')}',
+        style: AppTextStyles.cardTitle,
+      ),
       const SizedBox(height: 28),
       PrimaryButton(label: 'MARK AS DELIVERED', onPressed: _showConfirmation),
       const SizedBox(height: 10),
-      OutlinedButton(onPressed: _showIssue, style: OutlinedButton.styleFrom(foregroundColor: DailyColors.burgundy, side: const BorderSide(color: DailyColors.burgundy), minimumSize: const Size.fromHeight(48)), child: const Text('REPORT DELIVERY ISSUE')),
+      OutlinedButton(
+        onPressed: _showIssue,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: DailyColors.burgundy,
+          side: const BorderSide(color: DailyColors.burgundy),
+          minimumSize: const Size.fromHeight(48),
+          textStyle: AppTextStyles.button.copyWith(color: DailyColors.burgundy),
+        ),
+        child: const Text('REPORT DELIVERY ISSUE'),
+      ),
     ];
     return PartnerPage(
       title: 'Customer #${widget.customer.number}',
       onBack: widget.onBack,
-      child: SingleChildScrollView(padding: const EdgeInsets.fromLTRB(24, 22, 24, 35), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children)),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(24, 22, 24, 35),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: children,
+        ),
+      ),
     );
   }
 
@@ -65,7 +105,10 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("TODAY'S DELIVERY — ${widget.customer.name}", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                "TODAY'S DELIVERY — ${widget.customer.name}",
+                style: AppTextStyles.cardTitleLarge,
+              ),
               ...widget.customer.newspapers.map((paper) {
                 final index = widget.customer.newspapers.indexOf(paper);
                 return CheckboxListTile(
@@ -76,7 +119,7 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
                       selected[index] = value ?? false;
                     }
                   }),
-                  title: Text(paper),
+                  title: Text(paper, style: AppTextStyles.body),
                 );
               }),
               PrimaryButton(
@@ -86,15 +129,25 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
                     final session = await RoleSessionService.getPartner();
                     final userId = int.tryParse('${session?['user_id']}');
                     final partnerId = int.tryParse('${session?['partner_id']}');
-                    final targetId = widget.customer.deliveryId ?? widget.customer.assignmentId;
+                    final targetId =
+                        widget.customer.deliveryId ??
+                        widget.customer.assignmentId;
                     if (userId == null || targetId == null) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This delivery is not connected to the server.')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'This delivery is not connected to the server.',
+                            ),
+                          ),
+                        );
                       }
                       return;
                     }
                     try {
-                      final status = selected.every((value) => value) ? 'DELIVERED' : 'PARTIALLY_DELIVERED';
+                      final status = selected.every((value) => value)
+                          ? 'DELIVERED'
+                          : 'PARTIALLY_DELIVERED';
                       await RoleApiService(
                         authToken: session?['session_token']?.toString(),
                       ).updatePartnerDelivery(
@@ -104,16 +157,26 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
                         assignmentId: widget.customer.assignmentId,
                         status: status,
                         items: [
-                          for (var index = 0; index < widget.customer.itemIds.length; index++)
+                          for (
+                            var index = 0;
+                            index < widget.customer.itemIds.length;
+                            index++
+                          )
                             {
-                              'delivery_item_id': widget.customer.itemIds[index],
-                              'status': selected.length > index && selected[index] ? 'DELIVERED' : 'NOT_DELIVERED',
+                              'delivery_item_id':
+                                  widget.customer.itemIds[index],
+                              'status':
+                                  selected.length > index && selected[index]
+                                  ? 'DELIVERED'
+                                  : 'NOT_DELIVERED',
                             },
                         ],
                       );
                     } on RoleApiException catch (error) {
                       if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text(error.message)));
                       }
                       return;
                     }
@@ -139,18 +202,28 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('DELIVERY ISSUE', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              Text('DELIVERY ISSUE', style: AppTextStyles.cardTitleLarge),
               RadioGroup<String>(
                 groupValue: issue,
                 onChanged: (value) {
                   if (value != null) setModalState(() => issue = value);
                 },
                 child: Column(
-                  children: ['Customer not available', 'Address inaccessible', 'Newspaper damaged', 'Other'].map((reason) => RadioListTile<String>(
-                    value: reason,
-                    activeColor: DailyColors.burgundy,
-                    title: Text(reason),
-                  )).toList(),
+                  children:
+                      [
+                            'Customer not available',
+                            'Address inaccessible',
+                            'Newspaper damaged',
+                            'Other',
+                          ]
+                          .map(
+                            (reason) => RadioListTile<String>(
+                              value: reason,
+                              activeColor: DailyColors.burgundy,
+                              title: Text(reason, style: AppTextStyles.body),
+                            ),
+                          )
+                          .toList(),
                 ),
               ),
               PrimaryButton(
@@ -159,10 +232,18 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
                   final session = await RoleSessionService.getPartner();
                   final userId = int.tryParse('${session?['user_id']}');
                   final partnerId = int.tryParse('${session?['partner_id']}');
-                  final targetId = widget.customer.deliveryId ?? widget.customer.assignmentId;
+                  final targetId =
+                      widget.customer.deliveryId ??
+                      widget.customer.assignmentId;
                   if (userId == null || targetId == null) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This delivery is not connected to the server.')));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'This delivery is not connected to the server.',
+                          ),
+                        ),
+                      );
                     }
                     return;
                   }
@@ -186,7 +267,8 @@ class _PartnerCustomerScreenState extends State<PartnerCustomerScreen> {
                     );
                   } on RoleApiException catch (error) {
                     if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.message)));
+                      ScaffoldMessenger.of(context)
+                          .showSnackBar(SnackBar(content: Text(error.message)));
                     }
                     return;
                   }

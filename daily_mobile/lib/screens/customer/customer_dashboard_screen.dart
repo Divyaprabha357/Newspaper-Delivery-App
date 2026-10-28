@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../theme/app_text_styles.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/mobile_role_design.dart';
 import '../../widgets/daily_widgets.dart';
@@ -61,12 +62,13 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
       if (!mounted) return;
       setState(() {
         customer = Map<String, dynamic>.from(results[0]['user'] as Map? ?? {});
-        subscriptions =
-            List<dynamic>.from(results[1]['subscriptions'] as List? ?? []);
-        deliveries =
-            List<dynamic>.from(results[2]['deliveries'] as List? ?? []);
-        payments =
-            List<dynamic>.from(results[3]['payments'] as List? ?? []);
+        subscriptions = List<dynamic>.from(
+          results[1]['subscriptions'] as List? ?? [],
+        );
+        deliveries = List<dynamic>.from(
+          results[2]['deliveries'] as List? ?? [],
+        );
+        payments = List<dynamic>.from(results[3]['payments'] as List? ?? []);
         loading = false;
       });
     } on CustomerApiException catch (error) {
@@ -79,13 +81,17 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
         );
         return;
       }
-      if (mounted) setState(() { loading = false; loadError = error.message; });
+      if (mounted) {
+        setState(() {
+          loading = false;
+          loadError = error.message;
+        });
+      }
     } catch (_) {
       if (mounted) {
         setState(() {
           loading = false;
-          loadError =
-              'Unable to connect to the DAILY server. Please check your connection and try again.';
+          loadError = 'Unable to connect to the DAILY server. Please check your connection and try again.';
         });
       }
     }
@@ -107,46 +113,86 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
         extendBody: true,
         body: SafeArea(child: pages[index]),
         bottomNavigationBar: DailyBottomNav(
-        selectedIndex: index,
-        onTap: (i) {
-          setState(() {
-            index = i;
-          });
-        },
-      ),
+          selectedIndex: index,
+          onTap: (i) {
+            setState(() {
+              index = i;
+            });
+          },
+        ),
       ),
     );
   }
 
   Widget _home() {
     if (loading) {
-      return const Center(child: CircularProgressIndicator(color: DailyColors.burgundy));
+      return const Center(
+        child: CircularProgressIndicator(color: DailyColors.burgundy),
+      );
     }
     if (loadError != null) {
-      return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.cloud_off_outlined, color: DailyColors.burgundy, size: 40),
-        const SizedBox(height: 12),
-        Text(loadError!, textAlign: TextAlign.center),
-        const SizedBox(height: 14),
-        OutlinedButton(onPressed: () { setState(() { loading = true; loadError = null; }); _loadCustomerData(); }, child: const Text('TRY AGAIN')),
-      ])));
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.cloud_off_outlined,
+                color: DailyColors.burgundy,
+                size: 40,
+              ),
+              const SizedBox(height: 12),
+              Text(loadError!, textAlign: TextAlign.center),
+              const SizedBox(height: 14),
+              OutlinedButton(
+                onPressed: () {
+                  setState(() {
+                    loading = true;
+                    loadError = null;
+                  });
+                  _loadCustomerData();
+                },
+                child: const Text('TRY AGAIN'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
-    final firstName = (customer?['name'] as String? ?? 'Reader').split(' ').first;
-    final latestDelivery = deliveries.isNotEmpty ? Map<String, dynamic>.from(deliveries.first as Map) : null;
-    final latestName = latestDelivery?['newspaper_name'] as String? ?? 'No delivery recorded';
-    final latestStatus = latestDelivery?['item_status'] ?? latestDelivery?['delivery_status'] ?? 'Awaiting delivery';
-    final latestTime = latestDelivery?['actual_time'] ?? latestDelivery?['scheduled_time'] ?? '—';
+    final firstName = (customer?['name'] as String? ?? 'Reader')
+        .split(' ')
+        .first;
+    final latestDelivery = deliveries.isNotEmpty
+        ? Map<String, dynamic>.from(deliveries.first as Map)
+        : null;
+    final latestName =
+        latestDelivery?['newspaper_name'] as String? ?? 'No delivery recorded';
+    final latestStatus =
+        latestDelivery?['item_status'] ??
+        latestDelivery?['delivery_status'] ??
+        'Awaiting delivery';
+    final latestTime =
+        latestDelivery?['actual_time'] ??
+        latestDelivery?['scheduled_time'] ??
+        '—';
     final partnerName = latestDelivery?['partner_name'] ?? 'Not assigned';
     final pendingBills = payments.where((p) {
-      final status = (p['bill_status'] ?? p['payment_status'] ?? '').toString().toUpperCase();
+      final status = (p['bill_status'] ?? p['payment_status'] ?? '')
+          .toString()
+          .toUpperCase();
       return status == 'PENDING' || status == 'DUE';
     }).toList();
     final pendingCount = pendingBills.length;
     final pendingSum = pendingBills.fold<double>(
       0.0,
-      (acc, p) => acc + (double.tryParse('${p['total_amount'] ?? p['amount'] ?? 0}') ?? 0.0),
+      (acc, p) =>
+          acc +
+          (double.tryParse('${p['total_amount'] ?? p['amount'] ?? 0}') ?? 0.0),
     );
-    final pendingLabel = pendingCount > 0 ? '₹${pendingSum.toStringAsFixed(0)}' : '₹0';
+    final pendingLabel = pendingCount > 0
+        ? '₹${pendingSum.toStringAsFixed(0)}'
+        : '₹0';
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(22, 15, 22, 120),
       child: Column(
@@ -167,10 +213,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
             ),
           ),
 
-          Text(
-            'Welcome back, $firstName',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
+          Text('Welcome back, $firstName', style: AppTextStyles.pageTitle),
 
           const SizedBox(height: 18),
 
@@ -219,13 +262,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        latestName,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text(latestName, style: AppTextStyles.cardTitle),
 
                       const SizedBox(height: 10),
 
@@ -237,24 +274,18 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
 
                           Text(
                             '${latestStatus.toString().replaceAll('_', ' ')} • $latestTime',
-                            style: TextStyle(fontSize: 14),
+                            style: AppTextStyles.body,
                           ),
 
                           const Spacer(),
 
-                          Text(
-                            '$partnerName',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: DailyColors.gray,
-                            ),
-                          ),
+                          Text('$partnerName', style: AppTextStyles.caption),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Text(
                         'Supplier: ${latestDelivery?['supplier_name'] ?? '—'}',
-                        style: TextStyle(fontSize: 12, color: DailyColors.gray),
+                        style: AppTextStyles.caption,
                       ),
 
                       const SizedBox(height: 9),
@@ -273,9 +304,9 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
                             foregroundColor: Colors.white,
                             shape: const RoundedRectangleBorder(),
                           ),
-                          child: const Text(
+                          child: Text(
                             'VIEW DETAILS',
-                            style: TextStyle(fontSize: 12, letterSpacing: 1),
+                            style: AppTextStyles.buttonSmall,
                           ),
                         ),
                       ),
@@ -292,21 +323,31 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           Row(
             children: [
               Expanded(
-                child: _metric('ACTIVE\nSUBSCRIPTIONS', '${subscriptions.where((item) => item['status'] == 'ACTIVE').length}', 'VIEW ALL', () {
-                  setState(() {
-                    index = 1;
-                  });
-                }),
+                child: _metric(
+                  'ACTIVE\nSUBSCRIPTIONS',
+                  '${subscriptions.where((item) => item['status'] == 'ACTIVE').length}',
+                  'VIEW ALL',
+                  () {
+                    setState(() {
+                      index = 1;
+                    });
+                  },
+                ),
               ),
 
               const SizedBox(width: 10),
 
               Expanded(
-                child: _metric('PENDING\nPAYMENT', pendingLabel, 'VIEW PAYMENTS', () {
-                  setState(() {
-                    index = 2;
-                  });
-                }),
+                child: _metric(
+                  'PENDING\nPAYMENT',
+                  pendingLabel,
+                  'VIEW PAYMENTS',
+                  () {
+                    setState(() {
+                      index = 2;
+                    });
+                  },
+                ),
               ),
             ],
           ),
@@ -316,12 +357,16 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           const SectionLabel('Active Subscriptions'),
           const SizedBox(height: 8),
           if (subscriptions.isEmpty)
-            const Text('No active subscriptions.', style: TextStyle(color: DailyColors.gray))
+            Text('No active subscriptions.', style: AppTextStyles.caption)
           else
-            ...subscriptions.take(3).map((item) => _subscriptionSummary(
-              item['newspaper_name'] as String? ?? 'Newspaper',
-              '${item['status'] ?? '—'} • ${item['scheduled_delivery_time'] ?? '—'}',
-            )),
+            ...subscriptions
+                .take(3)
+                .map(
+                  (item) => _subscriptionSummary(
+                    item['newspaper_name'] as String? ?? 'Newspaper',
+                    '${item['status'] ?? '—'} • ${item['scheduled_delivery_time'] ?? '—'}',
+                  ),
+                ),
 
           const SizedBox(height: 18),
 
@@ -332,21 +377,33 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           _service('Report Missed Delivery', Icons.report_problem_outlined, () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ServiceRequestScreen(initialRequestType: 'Missed Delivery')),
+              MaterialPageRoute(
+                builder: (_) => const ServiceRequestScreen(
+                  initialRequestType: 'Missed Delivery',
+                ),
+              ),
             );
           }),
 
           _service('Pause Subscription', Icons.pause_circle_outline, () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ServiceRequestScreen(initialRequestType: 'Other Request')),
+              MaterialPageRoute(
+                builder: (_) => const ServiceRequestScreen(
+                  initialRequestType: 'Other Request',
+                ),
+              ),
             );
           }),
 
           _service('Manage Address', Icons.location_on_outlined, () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const ServiceRequestScreen(initialRequestType: 'Change Address')),
+              MaterialPageRoute(
+                builder: (_) => const ServiceRequestScreen(
+                  initialRequestType: 'Change Address',
+                ),
+              ),
             );
           }),
         ],
@@ -369,25 +426,11 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              letterSpacing: 1.2,
-              color: DailyColors.gray,
-            ),
-          ),
+          Text(title, style: AppTextStyles.metricLabel),
 
           const SizedBox(height: 8),
 
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              color: DailyColors.charcoal,
-            ),
-          ),
+          Text(value, style: AppTextStyles.metricValue),
 
           const SizedBox(height: 4),
 
@@ -395,10 +438,9 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
             onTap: onTap,
             child: Text(
               action,
-              style: const TextStyle(
+              style: AppTextStyles.bodyBold.copyWith(
                 fontSize: 12,
                 color: DailyColors.burgundy,
-                fontWeight: FontWeight.bold,
               ),
             ),
           ),
@@ -421,7 +463,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
 
             const SizedBox(width: 10),
 
-            Expanded(child: Text(text, style: const TextStyle(fontSize: 14))),
+            Expanded(child: Text(text, style: AppTextStyles.body)),
 
             const Icon(Icons.chevron_right, size: 18, color: DailyColors.gray),
           ],
@@ -444,20 +486,10 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
             color: DailyColors.burgundy,
           ),
           const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              name,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-          ),
-          Text(
-            details,
-            style: const TextStyle(fontSize: 12, color: DailyColors.gray),
-          ),
+          Expanded(child: Text(name, style: AppTextStyles.cardTitle)),
+          Text(details, style: AppTextStyles.caption),
         ],
       ),
     );
   }
 }
-
-

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'app_text_styles.dart';
+
 class DailyColors {
   static const cream = Color(0xFFF5ECE0);
   static const charcoal = Color(0xFF2B2A28);
@@ -25,23 +27,61 @@ class AppTheme {
         surface: DailyColors.cream,
       ),
       textTheme: GoogleFonts.libreBaskervilleTextTheme(
-        const TextTheme(
-          bodyLarge: TextStyle(color: DailyColors.charcoal),
-          bodyMedium: TextStyle(color: DailyColors.charcoal),
-          titleLarge: TextStyle(color: DailyColors.charcoal),
+        TextTheme(
+          displayLarge: AppTextStyles.displayLarge,
+          headlineLarge: AppTextStyles.pageTitle,
+          headlineMedium: AppTextStyles.cardTitleLarge,
+          titleLarge: AppTextStyles.pageTitle,
+          titleMedium: AppTextStyles.cardTitle,
+          titleSmall: AppTextStyles.bodyBold,
+          bodyLarge: AppTextStyles.bodyMedium,
+          bodyMedium: AppTextStyles.body,
+          bodySmall: AppTextStyles.caption,
+          labelLarge: AppTextStyles.button,
+          labelMedium: AppTextStyles.buttonSmall,
+          labelSmall: AppTextStyles.metadata,
         ),
       ),
-      inputDecorationTheme: const InputDecorationTheme(
+      inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: DailyColors.white,
-        border: OutlineInputBorder(
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 13,
+        ),
+        labelStyle: AppTextStyles.formHint,
+        hintStyle: AppTextStyles.formHint,
+        border: const OutlineInputBorder(
           borderSide: BorderSide(color: DailyColors.divider),
         ),
-        enabledBorder: OutlineInputBorder(
+        enabledBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: DailyColors.divider),
         ),
-        focusedBorder: OutlineInputBorder(
+        focusedBorder: const OutlineInputBorder(
           borderSide: BorderSide(color: DailyColors.burgundy, width: 1.4),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          textStyle: AppTextStyles.button,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(0, 48),
+          textStyle: AppTextStyles.button,
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          minimumSize: const Size(0, 44),
+          textStyle: AppTextStyles.button,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        labelTextStyle: WidgetStatePropertyAll(
+          AppTextStyles.metadata.copyWith(fontWeight: FontWeight.w600),
         ),
       ),
     );

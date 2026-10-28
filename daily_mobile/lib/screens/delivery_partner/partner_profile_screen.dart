@@ -2,16 +2,27 @@ import 'package:flutter/material.dart';
 
 import '../../services/role_api_service.dart';
 import '../../services/role_session_service.dart';
+import '../../theme/app_text_styles.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'partner_widgets.dart';
 
-enum ProfileSubScreen { personal, vehicle, emergency, availability, notifications, help }
+enum ProfileSubScreen {
+  personal,
+  vehicle,
+  emergency,
+  availability,
+  notifications,
+  help,
+}
 
 class PartnerProfileScreen extends StatefulWidget {
   final ValueChanged<ProfileSubScreen> onOpen;
-  final VoidCallback onLogout;
-  const PartnerProfileScreen({super.key, required this.onOpen, required this.onLogout});
+  final VoidCallback onLogout;  const PartnerProfileScreen({
+    super.key,
+    required this.onOpen,
+    required this.onLogout,
+  });
 
   @override
   State<PartnerProfileScreen> createState() => _PartnerProfileScreenState();
@@ -36,8 +47,14 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
     try {
       final session = await RoleSessionService.getPartner();
       final id = int.tryParse('${session?['user_id']}');
-      if (id == null) throw const RoleApiException('Your delivery partner session has expired.');
-      final response = await RoleApiService(authToken: session?['session_token']?.toString()).partnerProfile(id);
+      if (id == null) {
+        throw const RoleApiException(
+          'Your delivery partner session has expired.',
+        );
+      }
+      final response = await RoleApiService(
+        authToken: session?['session_token']?.toString(),
+      ).partnerProfile(id);
       if (mounted) {
         setState(() {
           profile = Map<String, dynamic>.from(response['profile'] as Map);
@@ -71,7 +88,7 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          PartnerTop('${p['name'] ?? 'Profile'}', subtitle: 'Your delivery partner account'),
+          const PartnerSection('PROFILE'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Container(
@@ -83,17 +100,27 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
                     radius: 28,
                     backgroundColor: DailyColors.burgundy,
                     child: Text(
-                      '${p['name'] ?? '?'}'.isEmpty ? '?' : '${p['name']}'.substring(0, 1).toUpperCase(),
-                      style: const TextStyle(color: Colors.white, fontSize: 24),
+                      '${p['name'] ?? '?'}'.isEmpty
+                          ? '?'
+                          : '${p['name']}'.substring(0, 1).toUpperCase(),
+                      style: AppTextStyles.pageTitleLight,
                     ),
                   ),
                   const SizedBox(width: 15),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${p['name'] ?? '—'}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(
+                        '${p['name'] ?? '—'}',
+                        style: AppTextStyles.cardTitleLarge,
+                      ),
                       const SizedBox(height: 5),
-                      Text('${p['partner_code'] ?? '—'}  •  ${p['partner_status'] ?? '—'}', style: const TextStyle(color: DailyColors.burgundy, fontSize: 12)),
+                      Text(
+                        '${p['partner_code'] ?? '—'}  •  ${p['partner_status'] ?? '—'}',
+                        style: AppTextStyles.caption.copyWith(
+                          color: DailyColors.burgundy,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -101,18 +128,23 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
             ),
           ),
           const PartnerSection('WORK'),
-          _info('Shift', '${p['shift_start'] ?? '—'} — ${p['shift_end'] ?? '—'}'),
+          _info(
+            'Shift',
+            '${p['shift_start'] ?? '—'} — ${p['shift_end'] ?? '—'}',
+          ),
           _info('Status', '${p['partner_status'] ?? '—'}'),
           const PartnerSection('VEHICLE'),
           _info('Vehicle', '${p['vehicle_type'] ?? '—'}'),
           _info('Registration', '${p['registration_number'] ?? '—'}'),
           const PartnerSection('ACCOUNT'),
-          ...links.map((item) => ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-                title: Text(item.$1, style: const TextStyle(fontSize: 14)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => widget.onOpen(item.$2),
-              )),
+          ...links.map(
+            (item) => ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 24),
+              title: Text(item.$1, style: AppTextStyles.body),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => widget.onOpen(item.$2),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
             child: OutlinedButton.icon(
@@ -123,6 +155,9 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
                 foregroundColor: DailyColors.burgundy,
                 side: const BorderSide(color: DailyColors.burgundy),
                 minimumSize: const Size.fromHeight(48),
+                textStyle: AppTextStyles.button.copyWith(
+                  color: DailyColors.burgundy,
+                ),
               ),
             ),
           ),
@@ -132,23 +167,28 @@ class _PartnerProfileScreenState extends State<PartnerProfileScreen> {
   }
 
   Widget _info(String label, String value) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-        child: Row(
-          children: [
-            Expanded(child: Text(label, style: const TextStyle(color: DailyColors.gray, fontSize: 12))),
-            Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          ],
-        ),
-      );
+    padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+    child: Row(
+      children: [
+        Expanded(child: Text(label, style: AppTextStyles.caption)),
+        Text(value, style: AppTextStyles.bodyBold),
+      ],
+    ),
+  );
 }
 
 class PartnerProfileSubScreen extends StatefulWidget {
   final ProfileSubScreen screen;
   final VoidCallback onBack;
-  const PartnerProfileSubScreen({super.key, required this.screen, required this.onBack});
+  const PartnerProfileSubScreen({
+    super.key,
+    required this.screen,
+    required this.onBack,
+  });
 
   @override
-  State<PartnerProfileSubScreen> createState() => _PartnerProfileSubScreenState();
+  State<PartnerProfileSubScreen> createState() =>
+      _PartnerProfileSubScreenState();
 }
 
 class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
@@ -173,8 +213,14 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
     try {
       final session = await RoleSessionService.getPartner();
       final id = int.tryParse('${session?['user_id']}');
-      if (id == null) throw const RoleApiException('Your delivery partner session has expired.');
-      final response = await RoleApiService(authToken: session?['session_token']?.toString()).partnerProfile(id);
+      if (id == null) {
+        throw const RoleApiException(
+          'Your delivery partner session has expired.',
+        );
+      }
+      final response = await RoleApiService(
+        authToken: session?['session_token']?.toString(),
+      ).partnerProfile(id);
       final p = Map<String, dynamic>.from(response['profile'] as Map);
       name.text = '${p['name'] ?? ''}';
       email.text = '${p['email'] ?? ''}';
@@ -185,7 +231,12 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
       available = '${p['partner_status']}'.toUpperCase() == 'AVAILABLE';
       if (mounted) setState(() => loading = false);
     } catch (e) {
-      if (mounted) setState(() { error = e; loading = false; });
+      if (mounted) {
+        setState(() {
+          error = e;
+          loading = false;
+        });
+      }
     }
   }
 
@@ -195,9 +246,15 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
       final session = await RoleSessionService.getPartner();
       final userId = int.tryParse('${session?['user_id']}');
       final partnerId = int.tryParse('${session?['partner_id']}');
-      if (userId == null) throw const RoleApiException('Your session has expired. Please sign in again.');
+      if (userId == null) {
+        throw const RoleApiException(
+          'Your session has expired. Please sign in again.',
+        );
+      }
 
-      final api = RoleApiService(authToken: session?['session_token']?.toString());
+      final api = RoleApiService(
+        authToken: session?['session_token']?.toString(),
+      );
       Map<String, dynamic> res;
 
       switch (widget.screen) {
@@ -206,7 +263,9 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
           final e = email.text.trim();
           final p = phone.text.trim();
           if (n.isEmpty || e.isEmpty || p.isEmpty) {
-            throw const RoleApiException('Name, email, and phone number are required.');
+            throw const RoleApiException(
+              'Name, email, and phone number are required.',
+            );
           }
           res = await api.updatePartnerProfile(
             userId: userId,
@@ -255,20 +314,27 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
       if (!mounted) return;
       setState(() => saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res['message'] as String? ?? 'Changes saved successfully.')),
+        SnackBar(
+          content: Text(
+            res['message'] as String? ?? 'Changes saved successfully.',
+          ),
+        ),
       );
       widget.onBack();
     } on RoleApiException catch (e) {
       if (!mounted) return;
       setState(() => saving = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       setState(() => saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to update changes. Please check your connection.')),
+        const SnackBar(
+          content: Text(
+            'Failed to update changes. Please check your connection.',
+          ),
+        ),
       );
     }
   }
@@ -297,11 +363,11 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
       child: loading
           ? const Center(child: CircularProgressIndicator())
           : error != null
-              ? partnerError(error!, _load)
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
-                  child: _content(),
-                ),
+          ? partnerError(error!, _load)
+          : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 30),
+              child: _content(),
+            ),
     );
   }
 
@@ -309,79 +375,139 @@ class _PartnerProfileSubScreenState extends State<PartnerProfileSubScreen> {
     switch (widget.screen) {
       case ProfileSubScreen.personal:
         return _form([
-          PartnerField(label: 'Full Name', hint: '', controller: name, icon: Icons.person_outline),
+          PartnerField(
+            label: 'Full Name',
+            hint: '',
+            controller: name,
+            icon: Icons.person_outline,
+          ),
           const SizedBox(height: 15),
-          PartnerField(label: 'Email', hint: '', controller: email, icon: Icons.email_outlined),
+          PartnerField(
+            label: 'Email',
+            hint: '',
+            controller: email,
+            icon: Icons.email_outlined,
+          ),
           const SizedBox(height: 15),
-          PartnerField(label: 'Phone Number', hint: '', controller: phone, icon: Icons.phone_outlined),
+          PartnerField(
+            label: 'Phone Number',
+            hint: '',
+            controller: phone,
+            icon: Icons.phone_outlined,
+          ),
         ]);
       case ProfileSubScreen.vehicle:
         return _form([
-          InputDecorator(decoration: const InputDecoration(labelText: 'Vehicle Type'), child: Text(vehicleType)),
+          InputDecorator(
+            decoration: const InputDecoration(labelText: 'Vehicle Type'),
+            child: Text(vehicleType, style: AppTextStyles.body),
+          ),
           const SizedBox(height: 15),
-          PartnerField(label: 'Registration Number', hint: '', controller: registration, icon: Icons.directions_bike_outlined),
+          PartnerField(
+            label: 'Registration Number',
+            hint: '',
+            controller: registration,
+            icon: Icons.directions_bike_outlined,
+          ),
         ]);
       case ProfileSubScreen.emergency:
         return _form([
-          PartnerField(label: 'Contact Name', hint: '', controller: emergency, icon: Icons.person_outline),
+          PartnerField(
+            label: 'Contact Name',
+            hint: '',
+            controller: emergency,
+            icon: Icons.person_outline,
+          ),
           const SizedBox(height: 15),
-          PartnerField(label: 'Phone Number', hint: '', controller: phone, icon: Icons.phone_outlined),
+          PartnerField(
+            label: 'Phone Number',
+            hint: '',
+            controller: phone,
+            icon: Icons.phone_outlined,
+          ),
         ]);
       case ProfileSubScreen.availability:
         return _form([
-          const Text('CURRENT STATUS'),
+          Text('CURRENT STATUS', style: AppTextStyles.sectionHeaderAccent),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: available,
             activeThumbColor: DailyColors.burgundy,
             onChanged: (v) => setState(() => available = v),
-            title: Text(available ? 'Available' : 'Unavailable'),
+            title: Text(
+              available ? 'Available' : 'Unavailable',
+              style: AppTextStyles.body,
+            ),
           ),
-          const InputDecorator(decoration: InputDecoration(labelText: 'Shift Start'), child: Text('06:00 AM')),
+          InputDecorator(
+            decoration: const InputDecoration(labelText: 'Shift Start'),
+            child: Text('06:00 AM', style: AppTextStyles.body),
+          ),
           const SizedBox(height: 15),
-          const InputDecorator(decoration: InputDecoration(labelText: 'Shift End'), child: Text('11:00 AM')),
+          InputDecorator(
+            decoration: const InputDecoration(labelText: 'Shift End'),
+            child: Text('11:00 AM', style: AppTextStyles.body),
+          ),
         ]);
       case ProfileSubScreen.notifications:
         return Column(
-          children: ['Delivery updates', 'Route updates', 'Payment updates', 'Issue updates', 'System notifications']
-              .map((item) => SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: true,
-                    activeThumbColor: DailyColors.burgundy,
-                    onChanged: (_) {},
-                    title: Text(item),
-                  ))
-              .toList(),
+          children:
+              [
+                    'Delivery updates',
+                    'Route updates',
+                    'Payment updates',
+                    'Issue updates',
+                    'System notifications',
+                  ]
+                  .map(
+                    (item) => SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: true,
+                      activeThumbColor: DailyColors.burgundy,
+                      onChanged: (_) {},
+                      title: Text(item, style: AppTextStyles.body),
+                    ),
+                  )
+                  .toList(),
         );
       case ProfileSubScreen.help:
-        return const Column(
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Frequently Asked Questions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            SizedBox(height: 18),
-            Text('How do I start my route?', style: TextStyle(fontWeight: FontWeight.bold)),
-            SizedBox(height: 6),
-            Text("Open Today's Route from your dashboard and select START ROUTE.", style: TextStyle(color: DailyColors.gray, height: 1.5)),
-            SizedBox(height: 20),
-            Text('Contact Support', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            SizedBox(height: 8),
-            Text('Support is available for route, delivery and account issues.', style: TextStyle(color: DailyColors.gray)),
+            Text('Frequently Asked Questions', style: AppTextStyles.cardTitle),
+            const SizedBox(height: 18),
+            Text('How do I start my route?', style: AppTextStyles.bodyBold),
+            const SizedBox(height: 6),
+            Text(
+              "Open Today's Route from your dashboard and select START ROUTE.",
+              style: AppTextStyles.body.copyWith(
+                color: DailyColors.gray,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text('Contact Support', style: AppTextStyles.cardTitle),
+            const SizedBox(height: 8),
+            Text(
+              'Support is available for route, delivery and account issues.',
+              style: AppTextStyles.body.copyWith(color: DailyColors.gray),
+            ),
           ],
         );
     }
   }
 
   Widget _form(List<Widget> children) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ...children,
-          const SizedBox(height: 26),
-          PrimaryButton(
-            label: saving ? 'SAVING...' : 'SAVE CHANGES',
-            onPressed: () {
-              if (!saving) _saveChanges();
-            },
-          ),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      ...children,
+      const SizedBox(height: 26),
+      PrimaryButton(
+        label: saving ? 'SAVING...' : 'SAVE CHANGES',
+        onPressed: () {
+          if (!saving) _saveChanges();
+        },
+      ),
+    ],
+  );
 }

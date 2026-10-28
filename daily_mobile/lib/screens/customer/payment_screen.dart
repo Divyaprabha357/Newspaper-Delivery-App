@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/customer_api_service.dart';
 import '../../services/session_service.dart';
+import '../../theme/app_text_styles.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/daily_widgets.dart';
 import 'service_request_screen.dart';
@@ -34,7 +35,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       final id = await SessionService.getCustomerId();
       if (id == null) throw const CustomerApiException('Please sign in again.');
-      final result = await Future.wait([_api.payments(id), _api.subscriptions(id)]);
+      final result = await Future.wait([
+        _api.payments(id),
+        _api.subscriptions(id),
+      ]);
       if (!mounted) return;
       setState(() {
         _payments = _list(result[0], 'payments');
@@ -42,12 +46,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
         _loading = false;
       });
     } on CustomerApiException catch (error) {
-      if (mounted) setState(() { _error = error.message; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _loading = false;
+        });
+      }
     }
   }
 
   List<Map<String, dynamic>> _list(Map<String, dynamic> data, String key) =>
-      (data[key] as List? ?? []).whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+      (data[key] as List? ?? [])
+          .whereType<Map>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
 
   String _date(dynamic value) {
     if (value == null) return '—';
@@ -76,10 +88,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(2)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(2),
+      ),
       child: Text(
         s,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg, letterSpacing: 0.5),
+        style: AppTextStyles.caption.copyWith(
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+          color: fg,
+          letterSpacing: 0.5,
+        ),
       ),
     );
   }
@@ -100,26 +120,30 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: DailyColors.burgundy))
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: DailyColors.burgundy,
+                      ),
+                    )
                   : _error != null
-                      ? _ErrorState(message: _error!, onRetry: _load)
-                      : RefreshIndicator(
-                          color: DailyColors.burgundy,
-                          onRefresh: _load,
-                          child: ListView(
-                            padding: const EdgeInsets.fromLTRB(22, 8, 22, 40),
-                            children: [
-                              _buildCurrentBillSection(),
-                              const SizedBox(height: 24),
-                              _buildTransactionsSection(),
-                              const SizedBox(height: 24),
-                              _buildSubscriptionsSection(),
-                              const SizedBox(height: 24),
-                              _buildHelpBanner(context),
-                              const SizedBox(height: 20),
-                            ],
-                          ),
-                        ),
+                  ? _ErrorState(message: _error!, onRetry: _load)
+                  : RefreshIndicator(
+                      color: DailyColors.burgundy,
+                      onRefresh: _load,
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(22, 8, 22, 40),
+                        children: [
+                          _buildCurrentBillSection(),
+                          const SizedBox(height: 24),
+                          _buildTransactionsSection(),
+                          const SizedBox(height: 24),
+                          _buildSubscriptionsSection(),
+                          const SizedBox(height: 24),
+                          _buildHelpBanner(context),
+                          const SizedBox(height: 20),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
@@ -129,7 +153,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   Widget _buildCurrentBillSection() {
     final bill = _payments.isNotEmpty ? _payments.first : null;
-    final billStatus = ((bill?['bill_status'] ?? bill?['payment_status'] ?? 'PAID') as String).toUpperCase();
+    final billStatus =
+        ((bill?['bill_status'] ?? bill?['payment_status'] ?? 'PAID') as String)
+            .toUpperCase();
     final isPaid = billStatus == 'PAID' || billStatus == 'SUCCESS';
     final total = bill?['total_amount'] ?? bill?['amount'] ?? '0.00';
     final periodStart = _date(bill?['billing_period_start']);
@@ -156,22 +182,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 children: [
                   Text(
                     isPaid ? 'OUTSTANDING BALANCE' : 'AMOUNT DUE',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 1.1,
-                      fontWeight: FontWeight.bold,
-                      color: DailyColors.gray,
-                    ),
+                    style: AppTextStyles.sectionHeader,
                   ),
-                  _statusBadge(isPaid ? 'PAID' : (bill?['bill_status'] ?? 'DUE')),
+                  _statusBadge(
+                    isPaid ? 'PAID' : (bill?['bill_status'] ?? 'DUE'),
+                  ),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 isPaid ? '₹0.00' : '₹$total',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
+                style: AppTextStyles.metricValueLarge.copyWith(
                   color: isPaid ? DailyColors.charcoal : DailyColors.burgundy,
                 ),
               ),
@@ -184,11 +205,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Billing Period', style: TextStyle(fontSize: 11, color: DailyColors.gray)),
+                        const Text(
+                          'Billing Period',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: DailyColors.gray,
+                          ),
+                        ),
                         const SizedBox(height: 3),
                         Text(
-                          hasPeriod ? '$periodStart — $periodEnd' : 'Active Cycle',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          hasPeriod
+                              ? '$periodStart — $periodEnd'
+                              : 'Active Cycle',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -197,11 +229,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(isPaid ? 'Paid On' : 'Due Date', style: const TextStyle(fontSize: 11, color: DailyColors.gray)),
+                        Text(
+                          isPaid ? 'Paid On' : 'Due Date',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: DailyColors.gray,
+                          ),
+                        ),
                         const SizedBox(height: 3),
                         Text(
                           isPaid ? paidDate : periodEnd,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ],
                     ),
@@ -220,7 +261,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                       padding: const EdgeInsets.symmetric(vertical: 13),
                       shape: const RoundedRectangleBorder(),
                     ),
-                    child: const Text('PAY NOW', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    child: const Text(
+                      'PAY NOW',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
                   ),
                 )
               else if (bill != null)
@@ -229,9 +276,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   children: [
                     const Row(
                       children: [
-                        Icon(Icons.check_circle, size: 16, color: Color(0xFF2E7D32)),
+                        Icon(
+                          Icons.check_circle,
+                          size: 16,
+                          color: Color(0xFF2E7D32),
+                        ),
                         SizedBox(width: 6),
-                        Text('Your account is current', style: TextStyle(fontSize: 12, color: Color(0xFF2E7D32), fontWeight: FontWeight.w600)),
+                        Text(
+                          'Your account is current',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Color(0xFF2E7D32),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ],
                     ),
                     OutlinedButton(
@@ -240,10 +298,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         foregroundColor: DailyColors.burgundy,
                         side: const BorderSide(color: DailyColors.divider),
                         shape: const RoundedRectangleBorder(),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         visualDensity: VisualDensity.compact,
                       ),
-                      child: const Text('VIEW RECEIPT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        'VIEW RECEIPT',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -280,7 +347,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 return _desktopTransactionsTable(_payments);
               }
               return Column(
-                children: _payments.map((p) => _mobileTransactionItem(context, p)).toList(),
+                children: _payments
+                    .map((p) => _mobileTransactionItem(context, p))
+                    .toList(),
               );
             },
           ),
@@ -318,10 +387,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
           ),
           ...payments.map((p) {
             final date = _date(p['payment_date'] ?? p['billing_period_end']);
-            final ref = p['transaction_reference'] ?? 'REF-${p['payment_id'] ?? '—'}';
+            final ref =
+                p['transaction_reference'] ?? 'REF-${p['payment_id'] ?? '—'}';
             final method = '${p['payment_method'] ?? 'UPI'}';
             final amount = _amount(p['amount'] ?? p['total_amount']);
-            final status = '${p['payment_status'] ?? p['bill_status'] ?? 'SUCCESS'}';
+            final status =
+                '${p['payment_status'] ?? p['bill_status'] ?? 'SUCCESS'}';
             return TableRow(
               decoration: const BoxDecoration(
                 border: Border(top: BorderSide(color: DailyColors.divider)),
@@ -332,22 +403,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 _td(method),
                 _td(amount, color: DailyColors.burgundy, isBold: true),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: _statusBadge(status),
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: TextButton(
                     onPressed: () => _showReceipt(context, p),
                     style: TextButton.styleFrom(
                       foregroundColor: DailyColors.burgundy,
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       visualDensity: VisualDensity.compact,
                     ),
-                    child: const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    child: const Text(
+                      'View',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -362,7 +448,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
     child: Text(
       label,
-      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.8, color: DailyColors.gray),
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.8,
+        color: DailyColors.gray,
+      ),
     ),
   );
 
@@ -379,12 +470,20 @@ class _PaymentScreenState extends State<PaymentScreen> {
     ),
   );
 
-  Widget _mobileTransactionItem(BuildContext context, Map<String, dynamic> payment) {
-    final date = _date(payment['payment_date'] ?? payment['billing_period_end']);
-    final ref = payment['transaction_reference'] ?? 'REF-${payment['payment_id'] ?? '—'}';
+  Widget _mobileTransactionItem(
+    BuildContext context,
+    Map<String, dynamic> payment,
+  ) {
+    final date = _date(
+      payment['payment_date'] ?? payment['billing_period_end'],
+    );
+    final ref =
+        payment['transaction_reference'] ??
+        'REF-${payment['payment_id'] ?? '—'}';
     final method = '${payment['payment_method'] ?? 'UPI'}';
     final amount = _amount(payment['amount'] ?? payment['total_amount']);
-    final status = '${payment['payment_status'] ?? payment['bill_status'] ?? 'SUCCESS'}';
+    final status =
+        '${payment['payment_status'] ?? payment['bill_status'] ?? 'SUCCESS'}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -399,7 +498,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(date, style: const TextStyle(fontSize: 12, color: DailyColors.gray, fontWeight: FontWeight.w500)),
+              Text(
+                date,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: DailyColors.gray,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               _statusBadge(status),
             ],
           ),
@@ -412,14 +518,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
               Expanded(
                 child: Text(
                   '$method • $ref',
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 10),
               Text(
                 amount,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: DailyColors.burgundy),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: DailyColors.burgundy,
+                ),
               ),
             ],
           ),
@@ -430,8 +543,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: () => _showReceipt(context, payment),
-              icon: const Icon(Icons.receipt_outlined, size: 14, color: DailyColors.burgundy),
-              label: const Text('View Receipt', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: DailyColors.burgundy)),
+              icon: const Icon(
+                Icons.receipt_outlined,
+                size: 14,
+                color: DailyColors.burgundy,
+              ),
+              label: const Text(
+                'View Receipt',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: DailyColors.burgundy,
+                ),
+              ),
               style: TextButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 visualDensity: VisualDensity.compact,
@@ -450,7 +574,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
         const SectionLabel('Active Subscriptions'),
         const SizedBox(height: 8),
         if (_subscriptions.isEmpty)
-          const Text('No active subscriptions found.', style: TextStyle(color: DailyColors.gray, fontSize: 13))
+          const Text(
+            'No active subscriptions found.',
+            style: TextStyle(color: DailyColors.gray, fontSize: 13),
+          )
         else
           Wrap(
             spacing: 10,
@@ -470,9 +597,23 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   children: [
                     NewspaperThumb(title: name, width: 34),
                     const SizedBox(height: 8),
-                    Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
-                    Text('$price / day', style: const TextStyle(fontSize: 11, color: DailyColors.gray)),
+                    Text(
+                      '$price / day',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: DailyColors.gray,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -497,9 +638,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Questions about your bill?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                Text(
+                  'Questions about your bill?',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
                 SizedBox(height: 2),
-                Text('Submit a billing dispute or question via Service Requests.', style: TextStyle(fontSize: 11, color: DailyColors.gray, height: 1.3)),
+                Text(
+                  'Submit a billing dispute or question via Service Requests.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: DailyColors.gray,
+                    height: 1.3,
+                  ),
+                ),
               ],
             ),
           ),
@@ -512,7 +663,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
               foregroundColor: DailyColors.burgundy,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             ),
-            child: const Text('GET HELP', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'GET HELP',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -520,11 +674,17 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 
   void _showReceipt(BuildContext context, Map<String, dynamic> payment) {
-    final ref = payment['transaction_reference'] ?? 'REF-${payment['payment_id'] ?? '—'}';
+    final ref =
+        payment['transaction_reference'] ??
+        'REF-${payment['payment_id'] ?? '—'}';
     final amount = _amount(payment['amount'] ?? payment['total_amount']);
-    final date = _date(payment['payment_date'] ?? payment['billing_period_end']);
+    final date = _date(
+      payment['payment_date'] ?? payment['billing_period_end'],
+    );
     final method = '${payment['payment_method'] ?? 'Online UPI'}';
-    final status = '${payment['payment_status'] ?? payment['bill_status'] ?? 'SUCCESS'}'.toUpperCase();
+    final status =
+        '${payment['payment_status'] ?? payment['bill_status'] ?? 'SUCCESS'}'
+            .toUpperCase();
     final billId = payment['bill_id'] != null ? '#${payment['bill_id']}' : '—';
     final periodStart = _date(payment['billing_period_start']);
     final periodEnd = _date(payment['billing_period_end']);
@@ -536,9 +696,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
         shape: const RoundedRectangleBorder(),
         title: const Row(
           children: [
-            Icon(Icons.receipt_long_outlined, color: DailyColors.burgundy, size: 22),
+            Icon(
+              Icons.receipt_long_outlined,
+              color: DailyColors.burgundy,
+              size: 22,
+            ),
             SizedBox(width: 8),
-            Text('Payment Receipt', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              'Payment Receipt',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
           ],
         ),
         content: Column(
@@ -556,8 +723,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Total Amount', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                Text(amount, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: DailyColors.burgundy)),
+                const Text(
+                  'Total Amount',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                Text(
+                  amount,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: DailyColors.burgundy,
+                  ),
+                ),
               ],
             ),
           ],
@@ -565,7 +742,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CLOSE', style: TextStyle(color: DailyColors.burgundy, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'CLOSE',
+              style: TextStyle(
+                color: DailyColors.burgundy,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -578,7 +761,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: DailyColors.gray)),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: DailyColors.gray),
+          ),
           const SizedBox(width: 10),
           Flexible(
             child: Text(
@@ -596,14 +782,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
     try {
       final customerId = await SessionService.getCustomerId();
       if (customerId == null) {
-        throw const CustomerApiException('Customer session not found. Please sign in again.');
+        throw const CustomerApiException(
+          'Customer session not found. Please sign in again.',
+        );
       }
 
       final billId = bill['bill_id'] is int
           ? bill['bill_id'] as int
           : int.tryParse('${bill['bill_id']}');
       final amountVal = bill['total_amount'] ?? bill['amount'];
-      final double? parsedAmount = amountVal != null ? double.tryParse('$amountVal') : null;
+      final double? parsedAmount = amountVal != null
+          ? double.tryParse('$amountVal')
+          : null;
 
       final res = await _api.payBill(
         customerId: customerId,
@@ -633,7 +823,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to process payment. Please try again.')),
+        const SnackBar(
+          content: Text('Failed to process payment. Please try again.'),
+        ),
       );
     }
   }
@@ -645,7 +837,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: DailyColors.white,
         shape: const RoundedRectangleBorder(),
-        title: const Text('Pay Bill (Simulated / Demo Mode)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Pay Bill (Simulated / Demo Mode)',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -658,19 +853,42 @@ class _PaymentScreenState extends State<PaymentScreen> {
               ),
               child: const Text(
                 'Demo Payment: Settles bill in DAILY database without charging real money.',
-                style: TextStyle(fontSize: 11, color: DailyColors.gray, height: 1.3),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: DailyColors.gray,
+                  height: 1.3,
+                ),
               ),
             ),
             const SizedBox(height: 12),
-            Text('Amount Due: $amount', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: DailyColors.burgundy)),
+            Text(
+              'Amount Due: $amount',
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: DailyColors.burgundy,
+              ),
+            ),
             const SizedBox(height: 12),
-            const Text('Select payment option:', style: TextStyle(fontSize: 13, color: DailyColors.gray)),
+            const Text(
+              'Select payment option:',
+              style: TextStyle(fontSize: 13, color: DailyColors.gray),
+            ),
             const SizedBox(height: 8),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.account_balance_wallet_outlined, color: DailyColors.burgundy),
-              title: const Text('UPI (Simulated Instant Transfer)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              subtitle: const Text('Simulates real-time settlement', style: TextStyle(fontSize: 11)),
+              leading: const Icon(
+                Icons.account_balance_wallet_outlined,
+                color: DailyColors.burgundy,
+              ),
+              title: const Text(
+                'UPI (Simulated Instant Transfer)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Simulates real-time settlement',
+                style: TextStyle(fontSize: 11),
+              ),
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
                 Navigator.pop(context);
@@ -679,9 +897,18 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
             ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.payments_outlined, color: DailyColors.burgundy),
-              title: const Text('Cash on Delivery (Partner Collected)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-              subtitle: const Text('Recorded for delivery partner verification', style: TextStyle(fontSize: 11)),
+              leading: const Icon(
+                Icons.payments_outlined,
+                color: DailyColors.burgundy,
+              ),
+              title: const Text(
+                'Cash on Delivery (Partner Collected)',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text(
+                'Recorded for delivery partner verification',
+                style: TextStyle(fontSize: 11),
+              ),
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
                 Navigator.pop(context);
@@ -693,7 +920,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL', style: TextStyle(color: DailyColors.gray)),
+            child: const Text(
+              'CANCEL',
+              style: TextStyle(color: DailyColors.gray),
+            ),
           ),
         ],
       ),
@@ -713,7 +943,11 @@ class _ErrorState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.cloud_off_outlined, color: DailyColors.burgundy, size: 40),
+          const Icon(
+            Icons.cloud_off_outlined,
+            color: DailyColors.burgundy,
+            size: 40,
+          ),
           const SizedBox(height: 12),
           Text(message, textAlign: TextAlign.center),
           const SizedBox(height: 14),
